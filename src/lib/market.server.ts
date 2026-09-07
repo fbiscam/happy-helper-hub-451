@@ -165,3 +165,51 @@ export function computeTechnicals(candles: Candle[]) {
     closes: closes.slice(-60).map((c) => Number(c.toFixed(2))),
   };
 }
+
+/** Live XAU/USD spot price (troy ounce, USD). */
+export async function fetchSpotPrice(): Promise<number | null> {
+  try {
+    const res = await fetch("https://api.gold-api.com/price/XAU", {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { price?: number };
+    const price = Number(data?.price);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Candles come from PAXG/USDT (intraday OHLC), but the headline price must be
+ * real XAU/USD spot. We shift the candle series by the spot-vs-PAXG offset so
+ * every level the panel and the AI quote matches real gold pricing.
+ */
+export async function fetchGoldMarket(interval: string, limit = 300) {
+  const [candles, ticker, spot] = await Promise.all([
+    fetchCandles(interval, limit),
+    fetchTicker(),
+    fetchSpotPrice(),
+  ]);
+  const last = candles[candles.length - 1]?.close ?? ticker.price;
+  if (spot === null || !Number.isFinite(last)) return { candles, ticker, spot: null };
+  const offset = spot - last;
+  const shifted = candles.map((c) => ({
+    ...c,
+    open: c.open + offset,
+    high: c.high + offset,
+    low: c.low + offset,
+    close: c.close + offset,
+  }));
+  return {
+    candles: shifted,
+    ticker: {
+      ...ticker,
+      price: Number(spot.toFixed(2)),
+      high: Number((ticker.high + offset).toFixed(2)),
+      low: Number((ticker.low + offset).toFixed(2)),
+    },
+    spot,
+  };
+}
