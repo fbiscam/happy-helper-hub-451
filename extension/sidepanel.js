@@ -174,6 +174,7 @@ function renderQuick() {
 
 function emptyState() {
   const t = $("thread");
+  t.classList.add("has-empty");
   t.innerHTML =
     '<div class="empty"><strong>Your ICT/SMC gold analyst is ready.</strong><br>' +
     'Share your chart and I’ll read structure, liquidity, order blocks, FVGs, entries and targets in real time.</div>';
@@ -208,7 +209,10 @@ function addMsg(cls, text, shot) {
     body.textContent = text;
   }
   d.appendChild(body);
-  if (t.querySelector(".empty")) t.innerHTML = "";
+  if (t.querySelector(".empty")) {
+    t.innerHTML = "";
+    t.classList.remove("has-empty");
+  }
   t.appendChild(d);
   t.scrollTop = t.scrollHeight;
   return d;
