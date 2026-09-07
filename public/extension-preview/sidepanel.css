@@ -92,11 +92,11 @@ button.share.on { background: var(--bull-soft); border-color: #b7dfc2; color: va
 .msg.err { color: var(--bear); }
 .msg .shot { display: block; max-width: 150px; border-radius: 10px; margin-bottom: 7px; border: 1px solid var(--border); }
 .typing { color: var(--muted); font-style: italic; }
-.empty { position: relative; padding-left: 34px; color: #3c4043; line-height: 1.58; }
+.empty { position: relative; padding-left: 34px; color: #3c4043; line-height: 1.58; margin-bottom: 16px; }
 .empty::before { content: "✦"; position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); font-size: 11px; }
 .empty strong { font-weight: 500; }
 
-.quick { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; margin-left: 28px; margin-top: 2px; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; margin-left: 28px; margin-top: 0; }
 .quick button { background: var(--bg); border-color: #dadce0; font-size: 11px; padding: 6px 10px; }
 .quick button:hover { background: var(--surface); color: var(--blue); border-color: #c6dafc; }
 
