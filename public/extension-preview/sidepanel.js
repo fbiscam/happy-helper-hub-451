@@ -353,13 +353,9 @@ async function loadSnapshot() {
     const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
     trend.textContent = bias.toUpperCase();
     trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
-    const t = new Date();
-    $("updated").textContent = `Live · updated ${t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-    $("dot").className = "dot live";
     drawChart(d.chart);
   } catch (e) {
-    $("updated").textContent = `Reconnecting… (${e.message})`;
-    $("dot").className = "dot off";
+    console.warn("market pulse failed", e);
   }
 }
 
