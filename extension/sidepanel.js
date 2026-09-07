@@ -304,6 +304,7 @@ function stopShare() {
   $("share").textContent = "Share screen";
   $("share").classList.remove("on");
   $("shstate").textContent = "Screen off";
+  updateQuickVisibility();
 }
 
 $("share").onclick = async () => {
