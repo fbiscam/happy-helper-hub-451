@@ -182,6 +182,16 @@ Your job:
 
 Output ONLY the final corrected answer for the user. Do not mention the draft, the review, yourself, or that any correction happened. If the draft is just a greeting or a short casual reply, return it as-is.`;
 
+const TRADE_INTENT =
+  /(trade|plan|entry|buy|sell|setup|analy|bias|target|stop|scalp|signal|signal|long|short|market|chart|screen|read|now|current|ict|smc|liquidity|fvg|order block)/i;
+
+function shouldReview(draft: string, question: string | undefined): boolean {
+  // Skip the second pass for casual chat — it doubles latency for no benefit.
+  if (draft.length < 400) return false;
+  if (question && question.length < 80 && !TRADE_INTENT.test(question)) return false;
+  return true;
+}
+
 async function seniorReview(
   key: string,
   context: string,
