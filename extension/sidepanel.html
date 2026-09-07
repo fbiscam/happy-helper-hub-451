@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jenvu</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <img class="brand-mark" src="jenvu-logo.png" alt="Jenvu logo" width="36" height="36" />
+        <div>
+          <h1>Jenvu</h1>
+        </div>
+      </div>
+      <div class="head-right">
+        <span class="live-dot"></span><span class="live-label">LIVE</span>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="intro">
+        <h2>Hello there.</h2>
+        <p>How can I assist with your gold trading strategy today?</p>
+      </section>
+
+      <section class="market" aria-label="Live gold market pulse">
+        <div class="market-top">
+          <span class="market-label">PAXG / USDT MARKET PULSE</span>
+          <span id="trend" class="trend">ANALYZING</span>
+        </div>
+        <div class="quote">
+          <span class="currency">$</span><span id="price" class="hprice">—</span>
+          <span id="change" class="hchange">…</span>
+        </div>
+        <div class="updated"><span id="dot" class="dot"></span><span id="updated">connecting…</span></div>
+        <div class="row" id="tfs" aria-label="Chart timeframe"></div>
+      </section>
+
+      <div id="screenbar" class="screenbar">
+        <button id="share" class="share">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <span>Share screen</span>
+        </button>
+        <label class="watch hidden" id="watchwrap">
+          <input type="checkbox" id="watch" /> Auto-watch
+        </label>
+        <span id="shstate" class="muted small">Screen off</span>
+      </div>
+
+      <div id="thread" class="thread"></div>
+
+      <div class="quick" id="quick"></div>
+    </main>
+
+    <div class="composer-wrap">
+      <div id="attached" class="muted small hidden">Chart attached · <button id="clear" class="link">Remove</button></div>
+      <div class="composer">
+        <textarea id="q" rows="1" placeholder="Ask Jenvu anything…"></textarea>
+        <button id="attach" class="icon" title="Attach chart image" aria-label="Attach chart image">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 15-5-5L5 21M3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2Z"/><circle cx="9" cy="8" r="2"/></svg>
+        </button>
+        <button id="send" class="send" title="Send" aria-label="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg>
+        </button>
+        <input id="file" type="file" accept="image/*" hidden />
+      </div>
+      <footer>AI can make mistakes. Verify levels before trading.</footer>
+    </div>
+
+    <video id="vid" autoplay muted playsinline class="hidden"></video>
+    <canvas id="cv" class="hidden"></canvas>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

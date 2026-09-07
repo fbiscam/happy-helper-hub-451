@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Jenvu — ICT/SMC Gold Analyst",
+  "version": "1.2.0",
+  "description": "Gemini-style side panel: share your screen and get live ICT/SMC gold (XAU/USD) analysis.",
+  "permissions": [
+    "sidePanel",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://project--e6504850-5ce1-48e5-b564-6e4bbb878c19.lovable.app/*"
+  ],
+  "action": {
+    "default_title": "Open Jenvu",
+    "default_icon": "icon.png"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
