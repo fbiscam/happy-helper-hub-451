@@ -209,7 +209,10 @@ function addMsg(cls, text, shot) {
     body.textContent = text;
   }
   d.appendChild(body);
-  if (t.querySelector(".empty")) t.innerHTML = "";
+  if (t.querySelector(".empty")) {
+    t.innerHTML = "";
+    t.classList.remove("has-empty");
+  }
   t.appendChild(d);
   t.scrollTop = t.scrollHeight;
   return d;
