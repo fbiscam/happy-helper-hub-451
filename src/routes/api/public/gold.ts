@@ -193,14 +193,22 @@ export const Route = createFileRoute("/api/public/gold")({
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
           chart: { t: number; c: number }[];
         } | null = null;
+        let htf: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null =
+          null;
         try {
-          const { fetchGoldMarket, computeTechnicals } = await import("@/lib/market.server");
-          const { candles, ticker } = await fetchGoldMarket(body.timeframe, 300);
+          const { fetchGoldMarket, computeTechnicals, fetchHtfSummaries } = await import(
+            "@/lib/market.server"
+          );
+          const { candles, ticker, offset } = await fetchGoldMarket(body.timeframe, 300);
           market = {
             ticker,
             technicals: computeTechnicals(candles),
             chart: candles.slice(-80).map((c) => ({ t: c.time, c: Number(c.close.toFixed(2)) })),
           };
+          if (body.action !== "snapshot") {
+            const higher = ["1h", "4h", "1d"].filter((tf) => tf !== body.timeframe);
+            htf = await fetchHtfSummaries(offset ?? 0, higher);
+          }
         } catch (error) {
           console.error("Gold market data request failed", error);
           if (body.action === "snapshot") {
@@ -223,7 +231,7 @@ export const Route = createFileRoute("/api/public/gold")({
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
 
         const context = market
-          ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+          ? JSON.stringify({ ticker, technicals, higherTimeframes: htf, timeframe: body.timeframe })
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
         if (body.action === "chat") {
