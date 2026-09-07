@@ -7,6 +7,8 @@ const ENDPOINTS =
     : ["/api/public/gold"];
 let API = ENDPOINTS[0];
 
+
+const TIMEFRAMES = ["15m", "1h", "4h", "1d"];
 const QUICKS = [
   { label: "Read screen", text: "Read the chart on my screen using ICT/SMC concepts." },
   { label: "Trade plan", text: "Give me a trade plan now: bias, entry (POI), stop, TP1/TP2, RR." },
@@ -16,6 +18,7 @@ const QUICKS = [
 
 const $ = (id) => document.getElementById(id);
 
+let timeframe = "15m";
 let chartImage = null;
 let stream = null;
 let watchTimer = null;
@@ -143,6 +146,23 @@ $("historybtn").onclick = () => {
 };
 $("historyClose").onclick = () => $("historyPanel").classList.add("hidden");
 
+
+function renderTabs() {
+  const c = $("tfs");
+  c.innerHTML = "";
+  TIMEFRAMES.forEach((tf) => {
+    const b = document.createElement("button");
+    b.className = "tab" + (tf === timeframe ? " active" : "");
+    b.textContent = tf;
+    b.onclick = () => {
+      timeframe = tf;
+      renderTabs();
+      loadSnapshot();
+    };
+    c.appendChild(b);
+  });
+}
+
 function renderQuick() {
   const c = $("quick");
   c.innerHTML = "";
@@ -261,6 +281,82 @@ async function post(body) {
     }
   }
   throw lastErr || new Error("Network error");
+}
+
+/* ---------- price chart ---------- */
+
+function drawChart(points) {
+  const svg = $("chart");
+  if (!svg) return;
+  if (!points || points.length < 2) {
+    svg.innerHTML = "";
+    return;
+  }
+  const W = 300;
+  const H = 96;
+  const pad = 6;
+  const vals = points.map((p) => p.c);
+  let min = Math.min(...vals);
+  let max = Math.max(...vals);
+  if (max === min) {
+    max += 1;
+    min -= 1;
+  }
+  const span = max - min;
+  const x = (i) => (i / (points.length - 1)) * W;
+  const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
+
+  let line = "";
+  points.forEach((p, i) => {
+    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(p.c).toFixed(2)} `;
+  });
+  const area = `${line}L${W} ${H} L0 ${H} Z`;
+  const up = vals[vals.length - 1] >= vals[0];
+  const stroke = up ? "#c9a227" : "#c0553f";
+  const lastX = W;
+  const lastY = y(vals[vals.length - 1]);
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="chfill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${stroke}" stop-opacity="0.28" />
+        <stop offset="100%" stop-color="${stroke}" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    <line class="chart-grid" x1="0" y1="${(H / 2).toFixed(1)}" x2="${W}" y2="${(H / 2).toFixed(1)}" />
+    <path d="${area}" fill="url(#chfill)" />
+    <path d="${line.trim()}" fill="none" stroke="${stroke}" stroke-width="1.6"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+    <circle cx="${(lastX - 1.5).toFixed(2)}" cy="${lastY.toFixed(2)}" r="2.6" fill="${stroke}" />
+  `;
+}
+
+let lastPrice = null;
+
+async function loadSnapshot() {
+  try {
+    const d = await post({ action: "snapshot", timeframe });
+    const p = d.ticker.price;
+    const el = $("price");
+    el.textContent = p.toFixed(2);
+    if (lastPrice !== null && p !== lastPrice) {
+      el.classList.remove("tick-up", "tick-down");
+      void el.offsetWidth;
+      el.classList.add(p > lastPrice ? "tick-up" : "tick-down");
+    }
+    lastPrice = p;
+    const up = d.ticker.changePercent >= 0;
+    const ch = $("change");
+    ch.textContent = `${up ? "▲" : "▼"} ${d.ticker.changePercent.toFixed(2)}%`;
+    ch.className = "hchange " + (up ? "bull" : "bear");
+    const trend = $("trend");
+    const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
+    trend.textContent = bias.toUpperCase();
+    trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
+    drawChart(d.chart);
+  } catch (e) {
+    console.warn("market pulse failed", e);
+  }
 }
 
 /* ---------- screen sharing ---------- */
@@ -427,6 +523,7 @@ async function send(preset, silentUser) {
   try {
     const d = await post({
       action: "chat",
+      timeframe,
       question: text,
       history: history.slice(-8),
       screenImage: shot || undefined,
@@ -436,6 +533,9 @@ async function send(preset, silentUser) {
     addMsg("ai", d.text);
     saveMessage("ai", d.text);
     history.push({ role: "user", text }, { role: "assistant", text: d.text });
+    if (d.ticker) {
+      $("price").textContent = d.ticker.price.toFixed(2);
+    }
   } catch (e) {
     pend.remove();
     addMsg("ai err", e.message);
@@ -445,8 +545,12 @@ async function send(preset, silentUser) {
   }
 }
 
+renderTabs();
 renderQuick();
 emptyState();
+loadSnapshot();
+setInterval(loadSnapshot, 5000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSnapshot(); });
 
 // Restore last active chat (or start fresh)
 store.get().then((data) => {
