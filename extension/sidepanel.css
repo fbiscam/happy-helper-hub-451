@@ -213,20 +213,3 @@ button.hbtn:hover{color:var(--blue);background:var(--blue-soft);border-color:#c6
   stroke-dasharray: 3 4;
   stroke-width: 1;
 }
-.chart-scale {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  pointer-events: none;
-  font-size: 10px;
-  letter-spacing: .04em;
-  color: rgba(42, 42, 42, .55);
-}
-.chart-scale span {
-  padding-left: 2px;
-}
-.chart-scale span:last-child {
-  text-align: left;
-}
