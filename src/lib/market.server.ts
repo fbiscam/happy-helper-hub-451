@@ -456,7 +456,7 @@ export async function fetchGoldMarket(interval: string, limit = 300) {
     fetchSpotPrice(),
   ]);
   const last = candles[candles.length - 1]?.close ?? ticker.price;
-  if (spot === null || !Number.isFinite(last)) return { candles, ticker, spot: null };
+  if (spot === null || !Number.isFinite(last)) return { candles, ticker, spot: null, offset: 0 };
   const offset = spot - last;
   const shifted = candles.map((c) => ({
     ...c,
@@ -474,6 +474,7 @@ export async function fetchGoldMarket(interval: string, limit = 300) {
       low: Number((ticker.low + offset).toFixed(2)),
     },
     spot,
+    offset,
   };
 }
 
