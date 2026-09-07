@@ -79,6 +79,10 @@ button.share.on { background: var(--bull-soft); border-color: #b7dfc2; color: va
 .watch { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .small { font-size: 11px; }
 .muted { color: var(--muted); }
+.screen-state { font-size: 16px; line-height: 1; cursor: default; filter: grayscale(1); transition: filter .2s ease, opacity .2s ease; }
+.screen-state.off { opacity: .45; }
+.screen-state.live { filter: grayscale(0); opacity: 1; animation: screenPulse 1.6s ease-in-out infinite; }
+@keyframes screenPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.12); opacity: .75; } }
 
 .thread { padding: 17px 0 10px; display: flex; flex-direction: column; gap: 15px; min-height: 160px; }
 .thread.has-empty { min-height: 0; padding-bottom: 0; }
