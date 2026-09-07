@@ -179,7 +179,7 @@ function emptyState() {
   t.classList.add("has-empty");
   t.innerHTML =
     '<div class="empty"><strong>Your ICT/SMC gold analyst is ready.</strong><br>' +
-    'Share your chart and I’ll read structure, liquidity, order blocks, FVGs, entries and targets in real time.</div>';
+    'Share your chart and I’ll read structure, liquidity, order blocks, FVGs and entries in real time.</div>';
   updateQuickVisibility();
 }
 
