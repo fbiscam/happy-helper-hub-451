@@ -201,22 +201,56 @@ function addMsg(cls, text, shot) {
   }
   const body = document.createElement("div");
   if (cls === "ai") {
+    const inline = (s) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+        .replace(/`(.+?)`/g, "<code>$1</code>");
+    let list = null;
+    const closeList = () => { list = null; };
     text.split("\n").forEach((line) => {
       const l = line.trim();
-      if (!l) return;
-      if (l.startsWith("#")) {
+      if (!l) { closeList(); return; }
+      const heading = l.match(/^#{1,6}\s*(.+)$/) || l.match(/^\*\*(.+?)\*\*:?$/);
+      const num = l.match(/^(\d+)[.)]\s+(.+)$/);
+      const bullet = l.match(/^[-*•]\s+(.+)$/);
+      if (heading) {
+        closeList();
         const h = document.createElement("h4");
-        h.textContent = l.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+        h.innerHTML = inline(heading[1].replace(/\*\*/g, "").replace(/:$/, ""));
         body.appendChild(h);
+      } else if (num) {
+        if (!list || list.tagName !== "OL") {
+          list = document.createElement("ol");
+          list.className = "md-list";
+          body.appendChild(list);
+        }
+        const li = document.createElement("li");
+        li.innerHTML = inline(num[2]);
+        list.appendChild(li);
+      } else if (bullet) {
+        if (!list || list.tagName !== "UL") {
+          list = document.createElement("ul");
+          list.className = "md-list";
+          body.appendChild(list);
+        }
+        const li = document.createElement("li");
+        li.innerHTML = inline(bullet[1]);
+        list.appendChild(li);
       } else {
-        const p = document.createElement("div");
-        p.textContent = l.replace(/\*\*/g, "").replace(/^[-*•]\s*/, "— ");
+        closeList();
+        const p = document.createElement("p");
+        p.className = "md-p";
+        p.innerHTML = inline(l);
         body.appendChild(p);
       }
     });
   } else {
     body.textContent = text;
   }
+
   d.appendChild(body);
   if (t.querySelector(".empty")) {
     t.innerHTML = "";
