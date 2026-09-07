@@ -138,7 +138,10 @@ export const Route = createFileRoute("/api/public/gold")({
           return json(request, { error: "Invalid request" }, 400);
         }
 
-        let market;
+        let market: {
+          ticker: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchTicker"]>>;
+          technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
+        } | null = null;
         try {
           const { fetchCandles, fetchTicker, computeTechnicals } = await import(
             "@/lib/market.server"
@@ -150,13 +153,16 @@ export const Route = createFileRoute("/api/public/gold")({
           market = { ticker, technicals: computeTechnicals(candles) };
         } catch (error) {
           console.error("Gold market data request failed", error);
-          return json(
-            request,
-            { error: "Live gold data is temporarily unavailable. Please try again shortly." },
-            503,
-          );
+          if (body.action === "snapshot") {
+            return json(
+              request,
+              { error: "Live gold data is temporarily unavailable. Please try again shortly." },
+              503,
+            );
+          }
         }
-        const { ticker, technicals } = market;
+        const ticker = market?.ticker ?? null;
+        const technicals = market?.technicals ?? null;
 
         if (body.action === "snapshot") {
           return json(request, { ticker, technicals, timeframe: body.timeframe });
@@ -165,7 +171,9 @@ export const Route = createFileRoute("/api/public/gold")({
         const key = process.env["BLUESMIND_API_KEY"];
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
 
-        const context = JSON.stringify({ ticker, technicals, timeframe: body.timeframe });
+        const context = market
+          ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+          : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
         if (body.action === "chat") {
           const parts: unknown[] = [
