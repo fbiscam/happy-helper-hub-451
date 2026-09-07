@@ -139,3 +139,4 @@ video, canvas { display: none; }
 .hprice.tick-down{animation:tickDown .6s ease}
 @keyframes tickUp{0%{color:#1e8e3e}100%{color:inherit}}
 @keyframes tickDown{0%{color:#d93025}100%{color:inherit}}
+@keyframes thinkingPulse{0%,100%{opacity:1}50%{opacity:.45}}
