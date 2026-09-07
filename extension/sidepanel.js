@@ -21,7 +21,126 @@ let chartImage = null;
 let stream = null;
 let watchTimer = null;
 let busy = false;
-const history = [];
+let history = [];
+
+/* ---------- chat threads (new chat + history) ---------- */
+
+const STORE_KEY = "jenvu_threads_v1";
+
+const store = {
+  get() {
+    return new Promise((resolve) => {
+      try {
+        if (typeof chrome !== "undefined" && chrome.storage?.local) {
+          chrome.storage.local.get(STORE_KEY, (r) => resolve(r[STORE_KEY] || { threads: [], activeId: null }));
+        } else {
+          resolve(JSON.parse(localStorage.getItem(STORE_KEY) || "null") || { threads: [], activeId: null });
+        }
+      } catch { resolve({ threads: [], activeId: null }); }
+    });
+  },
+  set(data) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage?.local) {
+        chrome.storage.local.set({ [STORE_KEY]: data });
+      } else {
+        localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      }
+    } catch { /* quota — ignore */ }
+  },
+};
+
+let threads = [];       // [{ id, title, updatedAt, messages: [{cls, text}] }]
+let activeId = null;
+
+function persist() {
+  store.set({ threads, activeId });
+}
+
+function activeThread() {
+  return threads.find((t) => t.id === activeId) || null;
+}
+
+function newChat() {
+  activeId = null;
+  history = [];
+  chartImage = null;
+  $("file").value = "";
+  $("attached").classList.add("hidden");
+  emptyState();
+  $("historyPanel").classList.add("hidden");
+  box.focus();
+}
+
+function loadThread(id) {
+  const t = threads.find((x) => x.id === id);
+  if (!t) return;
+  activeId = id;
+  history = t.messages.map((m) => ({ role: m.cls === "user" ? "user" : "assistant", text: m.text }));
+  const el = $("thread");
+  el.innerHTML = "";
+  if (!t.messages.length) emptyState();
+  t.messages.forEach((m) => addMsg(m.cls, m.text));
+  $("historyPanel").classList.add("hidden");
+  persist();
+}
+
+function saveMessage(cls, text) {
+  if (cls === "err") return;
+  let t = activeThread();
+  if (!t) {
+    t = { id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: "", updatedAt: Date.now(), messages: [] };
+    threads.unshift(t);
+    activeId = t.id;
+  }
+  t.messages.push({ cls, text });
+  t.updatedAt = Date.now();
+  if (!t.title && cls === "user") t.title = text.slice(0, 48) || "Chart analysis";
+  threads.sort((a, b) => b.updatedAt - a.updatedAt);
+  persist();
+}
+
+function deleteThread(id) {
+  threads = threads.filter((t) => t.id !== id);
+  if (activeId === id) { newChat(); }
+  persist();
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const c = $("historyList");
+  c.innerHTML = "";
+  if (!threads.length) {
+    c.innerHTML = '<div class="history-empty">Abhi koi purani chat nahi hai.<br>Nayi chat shuru karein — yahan save ho jayegi.</div>';
+    return;
+  }
+  threads.forEach((t) => {
+    const row = document.createElement("div");
+    row.className = "history-item";
+    const title = document.createElement("span");
+    title.className = "htitle";
+    title.textContent = t.title || "Chat";
+    const date = document.createElement("span");
+    date.className = "hdate";
+    date.textContent = new Date(t.updatedAt).toLocaleDateString([], { day: "numeric", month: "short" });
+    const del = document.createElement("button");
+    del.className = "hdel";
+    del.textContent = "✕";
+    del.title = "Delete chat";
+    del.onclick = (e) => { e.stopPropagation(); deleteThread(t.id); };
+    row.append(title, date, del);
+    row.onclick = () => loadThread(t.id);
+    c.appendChild(row);
+  });
+}
+
+$("newchat").onclick = () => newChat();
+$("historybtn").onclick = () => {
+  const p = $("historyPanel");
+  if (p.classList.contains("hidden")) { renderHistoryList(); p.classList.remove("hidden"); }
+  else p.classList.add("hidden");
+};
+$("historyClose").onclick = () => $("historyPanel").classList.add("hidden");
 
 const $ = (id) => document.getElementById(id);
 
@@ -245,7 +364,7 @@ async function send(preset, silentUser) {
   }
 
   const shot = grabFrame();
-  if (!silentUser) addMsg("user", text, shot || chartImage || undefined);
+  if (!silentUser) { addMsg("user", text, shot || chartImage || undefined); saveMessage("user", text); }
 
   const pend = addMsg("ai", "");
   pend.classList.add("typing");
@@ -262,6 +381,7 @@ async function send(preset, silentUser) {
     });
     pend.remove();
     addMsg("ai", d.text);
+    saveMessage("ai", d.text);
     history.push({ role: "user", text }, { role: "assistant", text: d.text });
     if (d.ticker) {
       $("price").textContent = d.ticker.price.toFixed(2);
@@ -281,3 +401,17 @@ emptyState();
 loadSnapshot();
 setInterval(loadSnapshot, 5000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSnapshot(); });
+
+// Restore last active chat (or start fresh)
+store.get().then((data) => {
+  threads = data.threads || [];
+  activeId = data.activeId || null;
+  const t = activeThread();
+  if (t && t.messages.length) {
+    const el = $("thread");
+    el.innerHTML = "";
+    t.messages.forEach((m) => addMsg(m.cls, m.text));
+    history = t.messages.map((m) => ({ role: m.cls === "user" ? "user" : "assistant", text: m.text }));
+  }
+  box.focus();
+});
