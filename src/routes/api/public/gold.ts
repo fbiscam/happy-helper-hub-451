@@ -152,8 +152,22 @@ async function callAi(
     }
     return { error: message ?? `BluesMind request failed [${res.status}]`, status: res.status };
   }
-  const out = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  return { text: out.choices?.[0]?.message?.content ?? "No analysis returned.", model };
+  const out = (await res.json()) as {
+    choices?: {
+      message?: { content?: string; reasoning_content?: string; reasoning?: string };
+      finish_reason?: string;
+    }[];
+  };
+  const msg = out.choices?.[0]?.message;
+  const text = (msg?.content || msg?.reasoning_content || msg?.reasoning || "").trim();
+  if (!text) {
+    console.error("Empty AI completion", JSON.stringify(out).slice(0, 800));
+    return {
+      error: "The analyst returned an empty response — please try again.",
+      status: 502,
+    };
+  }
+  return { text, model };
 }
 
 export const Route = createFileRoute("/api/public/gold")({
