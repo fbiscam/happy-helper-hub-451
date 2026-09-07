@@ -198,6 +198,10 @@ async function seniorReview(
   draft: string,
   question: string | undefined,
 ) {
+  // Trim the engine context for the reviewer — key numbers are enough to
+  // verify the draft, and a shorter prompt keeps the second pass fast.
+  const trimmedContext =
+    context.length > 2600 ? context.slice(0, 2600) + "\n..." : context;
   const review = await callAi(
     key,
     [
@@ -205,12 +209,12 @@ async function seniorReview(
       {
         role: "user",
         content:
-          `Desk engine data (ICT/SMC):\n${context}\n\n` +
+          `Desk engine data (ICT/SMC):\n${trimmedContext}\n\n` +
           (question ? `User asked: ${question}\n\n` : "") +
           `Junior analyst draft:\n${draft}`,
       },
     ],
-    1300,
+    1100,
     false,
   );
   if ("error" in review) return draft;
