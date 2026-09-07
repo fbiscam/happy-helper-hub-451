@@ -179,6 +179,13 @@ function emptyState() {
   t.innerHTML =
     '<div class="empty"><strong>Your ICT/SMC gold analyst is ready.</strong><br>' +
     'Share your chart and I’ll read structure, liquidity, order blocks, FVGs, entries and targets in real time.</div>';
+  updateQuickVisibility();
+}
+
+function updateQuickVisibility() {
+  const hasMessages = !!$("thread").querySelector(".msg");
+  const hasContext = !!chartImage || !!stream;
+  $("quick").classList.toggle("hidden", hasMessages || hasContext);
 }
 
 function addMsg(cls, text, shot) {
