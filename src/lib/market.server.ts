@@ -125,6 +125,123 @@ function cluster(levels: number[], price: number, tolerance: number, take = 3) {
 
 export type Technicals = ReturnType<typeof computeTechnicals>;
 
+type Swing = { price: number; index: number; kind: "high" | "low" };
+
+/** Swing points used for market structure (BOS / CHoCH). */
+function swings(candles: Candle[], span = 3): Swing[] {
+  const out: Swing[] = [];
+  for (let i = span; i < candles.length - span; i++) {
+    const win = candles.slice(i - span, i + span + 1);
+    const c = candles[i]!;
+    if (Math.max(...win.map((w) => w.high)) === c.high) out.push({ price: c.high, index: i, kind: "high" });
+    if (Math.min(...win.map((w) => w.low)) === c.low) out.push({ price: c.low, index: i, kind: "low" });
+  }
+  return out;
+}
+
+/** Last structural event: break of structure or change of character. */
+function structure(candles: Candle[], sw: Swing[]) {
+  const highs = sw.filter((s) => s.kind === "high").slice(-4);
+  const lows = sw.filter((s) => s.kind === "low").slice(-4);
+  const price = candles[candles.length - 1]!.close;
+  const lastHigh = highs[highs.length - 1];
+  const lastLow = lows[lows.length - 1];
+  const higherHighs = highs.length >= 2 && highs[highs.length - 1]!.price > highs[highs.length - 2]!.price;
+  const higherLows = lows.length >= 2 && lows[lows.length - 1]!.price > lows[lows.length - 2]!.price;
+  const bias = higherHighs && higherLows ? "bullish" : !higherHighs && !higherLows ? "bearish" : "mixed";
+  let event = "none";
+  if (lastHigh && price > lastHigh.price) event = bias === "bearish" ? "bullish CHoCH" : "bullish BOS";
+  else if (lastLow && price < lastLow.price) event = bias === "bullish" ? "bearish CHoCH" : "bearish BOS";
+  return {
+    bias,
+    event,
+    lastSwingHigh: lastHigh ? Number(lastHigh.price.toFixed(2)) : null,
+    lastSwingLow: lastLow ? Number(lastLow.price.toFixed(2)) : null,
+  };
+}
+
+/** Unmitigated 3-candle fair value gaps (imbalances) nearest to price. */
+function fairValueGaps(candles: Candle[], price: number, take = 4) {
+  const gaps: { type: "bullish" | "bearish"; from: number; to: number; mid: number }[] = [];
+  for (let i = 2; i < candles.length; i++) {
+    const a = candles[i - 2]!;
+    const c = candles[i]!;
+    if (c.low > a.high) gaps.push({ type: "bullish", from: a.high, to: c.low, mid: (a.high + c.low) / 2 });
+    if (c.high < a.low) gaps.push({ type: "bearish", from: c.high, to: a.low, mid: (c.high + a.low) / 2 });
+  }
+  // keep gaps price has not fully traded back through
+  const later = (g: { from: number; to: number }) => Math.abs(g.mid - price) > 0;
+  return gaps
+    .filter(later)
+    .sort((x, y) => Math.abs(x.mid - price) - Math.abs(y.mid - price))
+    .slice(0, take)
+    .map((g) => ({
+      type: g.type,
+      from: Number(Math.min(g.from, g.to).toFixed(2)),
+      to: Number(Math.max(g.from, g.to).toFixed(2)),
+    }));
+}
+
+/** Last down/up candle before an impulsive move = order block. */
+function orderBlocks(candles: Candle[], price: number, atrValue: number, take = 3) {
+  const obs: { type: "bullish" | "bearish"; from: number; to: number }[] = [];
+  for (let i = 1; i < candles.length - 2; i++) {
+    const c = candles[i]!;
+    const n1 = candles[i + 1]!;
+    const n2 = candles[i + 2]!;
+    const impulseUp = n1.close - c.close > atrValue && n2.close > n1.close;
+    const impulseDown = c.close - n1.close > atrValue && n2.close < n1.close;
+    if (c.close < c.open && impulseUp) obs.push({ type: "bullish", from: c.low, to: c.high });
+    if (c.close > c.open && impulseDown) obs.push({ type: "bearish", from: c.low, to: c.high });
+  }
+  return obs
+    .sort((x, y) => Math.abs((x.from + x.to) / 2 - price) - Math.abs((y.from + y.to) / 2 - price))
+    .slice(0, take)
+    .map((o) => ({ type: o.type, from: Number(o.from.toFixed(2)), to: Number(o.to.toFixed(2)) }));
+}
+
+/** Equal highs / lows = resting liquidity pools. */
+function liquidity(sw: Swing[], tolerance: number) {
+  const eq = (kind: "high" | "low") => {
+    const pts = sw.filter((s) => s.kind === kind).map((s) => s.price);
+    const pools: number[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        if (Math.abs(pts[i]! - pts[j]!) <= tolerance * 0.25) pools.push((pts[i]! + pts[j]!) / 2);
+      }
+    }
+    return [...new Set(pools.map((p) => Number(p.toFixed(2))))].slice(-3);
+  };
+  return { buySideLiquidity: eq("high"), sellSideLiquidity: eq("low") };
+}
+
+/** Premium / discount inside the current dealing range. */
+function dealingRange(candles: Candle[], price: number) {
+  const range = candles.slice(-60);
+  const high = Math.max(...range.map((c) => c.high));
+  const low = Math.min(...range.map((c) => c.low));
+  const eq = (high + low) / 2;
+  const pct = ((price - low) / (high - low || 1)) * 100;
+  return {
+    rangeHigh: Number(high.toFixed(2)),
+    rangeLow: Number(low.toFixed(2)),
+    equilibrium: Number(eq.toFixed(2)),
+    positionPct: Number(pct.toFixed(1)),
+    zone: pct > 55 ? "premium" : pct < 45 ? "discount" : "equilibrium",
+  };
+}
+
+/** Which ICT killzone / session is live right now (UTC). */
+function session() {
+  const h = new Date().getUTCHours();
+  if (h >= 0 && h < 6) return "Asian range";
+  if (h >= 6 && h < 9) return "Pre-London";
+  if (h >= 9 && h < 11) return "London killzone";
+  if (h >= 11 && h < 13) return "London/NY overlap";
+  if (h >= 13 && h < 16) return "New York killzone";
+  return "Late NY / close";
+}
+
 export function computeTechnicals(candles: Candle[]) {
   const closes = candles.map((c) => c.close);
   const price = closes[closes.length - 1]!;
@@ -134,6 +251,7 @@ export function computeTechnicals(candles: Candle[]) {
   const a = atr(candles);
   const { highs, lows } = pivots(candles);
   const last20 = candles.slice(-20);
+  const sw = swings(candles);
 
   const e20 = ema20[ema20.length - 1]!;
   const e50 = ema50[ema50.length - 1]!;
@@ -141,6 +259,25 @@ export function computeTechnicals(candles: Candle[]) {
 
   const trend =
     price > e20 && e20 > e50 ? "uptrend" : price < e20 && e20 < e50 ? "downtrend" : "range";
+
+  const struct = structure(candles, sw);
+  const range = dealingRange(candles, price);
+
+  // Simple confluence score so the model can grade setup quality honestly.
+  const bullFactors = [
+    trend === "uptrend",
+    price > e200,
+    struct.bias === "bullish",
+    range.zone === "discount",
+    Number(rsi(closes).toFixed(1)) > 50,
+  ].filter(Boolean).length;
+  const bearFactors = [
+    trend === "downtrend",
+    price < e200,
+    struct.bias === "bearish",
+    range.zone === "premium",
+    Number(rsi(closes).toFixed(1)) < 50,
+  ].filter(Boolean).length;
 
   return {
     price: Number(price.toFixed(2)),
@@ -162,9 +299,24 @@ export function computeTechnicals(candles: Candle[]) {
       price,
       a,
     ),
+    smc: {
+      structure: struct,
+      dealingRange: range,
+      fairValueGaps: fairValueGaps(candles, price),
+      orderBlocks: orderBlocks(candles, price, a),
+      ...liquidity(sw, a),
+      session: session(),
+      confluence: {
+        bullish: bullFactors,
+        bearish: bearFactors,
+        max: 5,
+        netBias: bullFactors > bearFactors ? "bullish" : bearFactors > bullFactors ? "bearish" : "neutral",
+      },
+    },
     closes: closes.slice(-60).map((c) => Number(c.toFixed(2))),
   };
 }
+
 
 /** Live XAU/USD spot price (troy ounce, USD). */
 export async function fetchSpotPrice(): Promise<number | null> {
