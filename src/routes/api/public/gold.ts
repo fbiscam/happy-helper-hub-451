@@ -210,7 +210,7 @@ async function seniorReview(
           `Junior analyst draft:\n${draft}`,
       },
     ],
-    1800,
+    1300,
     false,
   );
   if ("error" in review) return draft;
@@ -309,13 +309,14 @@ export const Route = createFileRoute("/api/public/gold")({
               ...history,
               { role: "user", content: parts },
             ],
-            1600,
+            1300,
             Boolean(shot),
           );
           if ("error" in result) return json(request, { error: result.error }, result.status);
-          const reviewed = market
-            ? await seniorReview(key, context, result.text, body.question)
-            : result.text;
+          const reviewed =
+            market && shouldReview(result.text, body.question)
+              ? await seniorReview(key, context, result.text, body.question)
+              : result.text;
           return json(request, { text: reviewed, ticker, technicals, model: result.model });
         }
 
@@ -339,13 +340,14 @@ export const Route = createFileRoute("/api/public/gold")({
             { role: "system", content: EXPERT_SYSTEM },
             { role: "user", content: userContent },
           ],
-          1400,
+          1200,
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
-        const finalText = market
-          ? await seniorReview(key, context, result.text, body.question)
-          : result.text;
+        const finalText =
+          market && shouldReview(result.text, body.question)
+            ? await seniorReview(key, context, result.text, body.question)
+            : result.text;
         return json(request, { text: finalText, ticker, technicals, model: result.model });
       },
     },
