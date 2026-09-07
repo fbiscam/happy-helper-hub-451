@@ -70,6 +70,7 @@ function newChat() {
   $("file").value = "";
   $("attached").classList.add("hidden");
   emptyState();
+  updateQuickVisibility();
   $("historyPanel").classList.add("hidden");
   box.focus();
 }
@@ -83,6 +84,7 @@ function loadThread(id) {
   el.innerHTML = "";
   if (!t.messages.length) emptyState();
   t.messages.forEach((m) => addMsg(m.cls, m.text));
+  updateQuickVisibility();
   $("historyPanel").classList.add("hidden");
   persist();
 }
@@ -178,6 +180,13 @@ function emptyState() {
   t.innerHTML =
     '<div class="empty"><strong>Your ICT/SMC gold analyst is ready.</strong><br>' +
     'Share your chart and I’ll read structure, liquidity, order blocks, FVGs, entries and targets in real time.</div>';
+  updateQuickVisibility();
+}
+
+function updateQuickVisibility() {
+  const hasMessages = !!$("thread").querySelector(".msg");
+  const hasContext = !!chartImage || !!stream;
+  $("quick").classList.toggle("hidden", hasMessages || hasContext);
 }
 
 function addMsg(cls, text, shot) {
@@ -214,6 +223,7 @@ function addMsg(cls, text, shot) {
     t.classList.remove("has-empty");
   }
   t.appendChild(d);
+  updateQuickVisibility();
   t.scrollTop = t.scrollHeight;
   return d;
 }
@@ -294,6 +304,7 @@ function stopShare() {
   $("share").textContent = "Share screen";
   $("share").classList.remove("on");
   $("shstate").textContent = "Screen off";
+  updateQuickVisibility();
 }
 
 $("share").onclick = async () => {
@@ -309,9 +320,11 @@ $("share").onclick = async () => {
     $("share").classList.add("on");
     $("shstate").textContent = "Screen live";
     $("watchwrap").classList.remove("hidden");
+    updateQuickVisibility();
   } catch (e) {
     $("shstate").textContent = "Screen share cancel ho gaya";
     stream = null;
+    updateQuickVisibility();
   }
 };
 
@@ -335,6 +348,7 @@ $("file").onchange = (e) => {
   r.onload = () => {
     chartImage = String(r.result);
     $("attached").classList.remove("hidden");
+    updateQuickVisibility();
   };
   r.readAsDataURL(f);
 };
@@ -342,6 +356,7 @@ $("clear").onclick = () => {
   chartImage = null;
   $("file").value = "";
   $("attached").classList.add("hidden");
+  updateQuickVisibility();
 };
 
 const box = $("q");
