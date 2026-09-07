@@ -423,7 +423,19 @@ async function send(preset, silentUser) {
     box.style.height = "auto";
   }
 
-  const shot = grabFrame();
+  let shot = grabFrame();
+  if (!shot && stream) {
+    for (let i = 0; i < 12 && !shot; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      shot = grabFrame();
+    }
+  }
+  if (!shot && stream) {
+    busy = false;
+    $("send").disabled = false;
+    addMsg("ai err", "Screen frame nahi mil paaya. Share dobara start karein (stop ✕ dabayein, phir Share screen).");
+    return;
+  }
   if (!silentUser) { addMsg("user", text, shot || chartImage || undefined); saveMessage("user", text); }
 
   const pend = addMsg("ai", "");
