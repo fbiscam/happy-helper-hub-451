@@ -182,12 +182,33 @@ Your job:
 
 Output ONLY the final corrected answer for the user. Do not mention the draft, the review, yourself, or that any correction happened. If the draft is just a greeting or a short casual reply, return it as-is.`;
 
+const TRADE_INTENT =
+  /(trade|plan|entry|buy|sell|setup|analy|bias|target|stop|scalp|signal|signal|long|short|market|chart|screen|read|now|current|ict|smc|liquidity|fvg|order block)/i;
+
+function shouldReview(
+  draft: string,
+  question: string | undefined,
+  hasImage: boolean,
+): boolean {
+  // The second pass doubles latency, so it only runs where accuracy matters
+  // most: when a chart/screen image is attached (vision drafts need a
+  // text-model check). Text-only answers are already engine-verified.
+  if (!hasImage) return false;
+  if (draft.length < 400) return false;
+  if (question && question.length < 80 && !TRADE_INTENT.test(question)) return false;
+  return true;
+}
+
 async function seniorReview(
   key: string,
   context: string,
   draft: string,
   question: string | undefined,
 ) {
+  // Trim the engine context for the reviewer — key numbers are enough to
+  // verify the draft, and a shorter prompt keeps the second pass fast.
+  const trimmedContext =
+    context.length > 2600 ? context.slice(0, 2600) + "\n..." : context;
   const review = await callAi(
     key,
     [
@@ -195,12 +216,12 @@ async function seniorReview(
       {
         role: "user",
         content:
-          `Desk engine data (ICT/SMC):\n${context}\n\n` +
+          `Desk engine data (ICT/SMC):\n${trimmedContext}\n\n` +
           (question ? `User asked: ${question}\n\n` : "") +
           `Junior analyst draft:\n${draft}`,
       },
     ],
-    1800,
+    1100,
     false,
   );
   if ("error" in review) return draft;
@@ -299,13 +320,14 @@ export const Route = createFileRoute("/api/public/gold")({
               ...history,
               { role: "user", content: parts },
             ],
-            1600,
+            1300,
             Boolean(shot),
           );
           if ("error" in result) return json(request, { error: result.error }, result.status);
-          const reviewed = market
-            ? await seniorReview(key, context, result.text, body.question)
-            : result.text;
+          const reviewed =
+            market && shouldReview(result.text, body.question, Boolean(shot))
+              ? await seniorReview(key, context, result.text, body.question)
+              : result.text;
           return json(request, { text: reviewed, ticker, technicals, model: result.model });
         }
 
@@ -329,13 +351,15 @@ export const Route = createFileRoute("/api/public/gold")({
             { role: "system", content: EXPERT_SYSTEM },
             { role: "user", content: userContent },
           ],
-          1400,
+          1200,
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
-        const finalText = market
-          ? await seniorReview(key, context, result.text, body.question)
-          : result.text;
+        const finalText =
+          market &&
+          shouldReview(result.text, body.question, Boolean(body.chartImage))
+            ? await seniorReview(key, context, result.text, body.question)
+            : result.text;
         return json(request, { text: finalText, ticker, technicals, model: result.model });
       },
     },
