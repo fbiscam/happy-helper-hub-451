@@ -10,7 +10,7 @@
   --surface: #f7f8fa;
   --surface-strong: #f1f3f4;
   --border: #e4e7eb;
-  --fg: #6e717c;
+  --fg: #000000;
   --muted: #70757a;
   --blue: #1a73e8;
   --blue-soft: #e8f0fe;
@@ -31,8 +31,8 @@ body {
   font-family: "Google Sans", "Google Sans Text", "Product Sans", system-ui, sans-serif;
   font-weight: 400;
   letter-spacing: 0;
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
