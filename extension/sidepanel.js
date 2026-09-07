@@ -16,6 +16,8 @@ const QUICKS = [
   { label: "Structure", text: "Explain market structure: BOS/CHoCH, premium or discount?" },
 ];
 
+const $ = (id) => document.getElementById(id);
+
 let timeframe = "1h";
 let chartImage = null;
 let stream = null;
