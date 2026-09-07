@@ -132,11 +132,6 @@ video, canvas { display: none; }
   *, *::before, *::after { transition: none !important; }
 }
 
-.updated{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:#5f6368}
-.dot{width:7px;height:7px;border-radius:50%;background:#9aa0a6;display:inline-block}
-.dot.live{background:#1e8e3e;animation:pulse 1.6s infinite}
-.dot.off{background:#d93025}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .hprice.tick-up{animation:tickUp .6s ease}
 .hprice.tick-down{animation:tickDown .6s ease}
 @keyframes tickUp{0%{color:#1e8e3e}100%{color:inherit}}
