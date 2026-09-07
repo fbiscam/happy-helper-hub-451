@@ -418,7 +418,8 @@ function stopShare() {
   $("watchwrap").classList.add("hidden");
   $("share").textContent = "Share screen";
   $("share").classList.remove("on");
-  $("shstate").textContent = "Screen off";
+  $("shstate").className = "screen-state off";
+  $("shstate").title = "Screen off";
   hideShareCard();
   updateQuickVisibility();
 }
@@ -434,12 +435,14 @@ $("share").onclick = async () => {
     stream.getVideoTracks()[0].addEventListener("ended", stopShare);
     $("share").textContent = "Stop sharing";
     $("share").classList.add("on");
-    $("shstate").textContent = "Screen live";
+    $("shstate").className = "screen-state live";
+    $("shstate").title = "Screen live";
     $("watchwrap").classList.remove("hidden");
     showShareCard();
     updateQuickVisibility();
   } catch (e) {
-    $("shstate").textContent = "Screen share cancelled";
+    $("shstate").className = "screen-state off";
+    $("shstate").title = "Screen share cancelled";
     stream = null;
     updateQuickVisibility();
   }
