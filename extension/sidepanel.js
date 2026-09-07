@@ -382,14 +382,26 @@ function hideShareCard() {
 }
 
 function refreshThumb() {
-  const shot = grabFrame();
-  if (shot) $("shthumb").src = shot;
+  // Thumbnail always shows the shared website's logo (favicon), never the screen frame.
+}
+
+function setSiteLogo(tab) {
+  const img = $("shthumb");
+  let src = tab && tab.favIconUrl ? tab.favIconUrl : "";
+  if (!src && tab && tab.url) {
+    try {
+      src = "https://www.google.com/s2/favicons?sz=64&domain=" + new URL(tab.url).hostname;
+    } catch (e) {}
+  }
+  img.src = src || "jenvu-logo.png";
+  img.onerror = () => { img.onerror = null; img.src = "jenvu-logo.png"; };
 }
 
 async function showShareCard() {
   $("sharecard").classList.remove("hidden");
   $("shtitle").textContent = "Shared screen";
   $("shurl").textContent = "Live screen share";
+  setSiteLogo(null);
   try {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -400,13 +412,10 @@ async function showShareCard() {
           try { $("shurl").textContent = new URL(t.url).hostname + new URL(t.url).pathname; }
           catch (e) { $("shurl").textContent = t.url; }
         }
-        if (t.favIconUrl) $("shthumb").src = t.favIconUrl;
+        setSiteLogo(t);
       }
     }
   } catch (e) {}
-  setTimeout(refreshThumb, 800);
-  if (thumbTimer) clearInterval(thumbTimer);
-  thumbTimer = setInterval(refreshThumb, 5000);
 }
 
 function stopShare() {
