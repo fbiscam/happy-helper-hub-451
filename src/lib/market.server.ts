@@ -242,6 +242,112 @@ function session() {
   return "Late NY / close";
 }
 
+/** Recent stop raids: wick through a prior swing that closes back inside. */
+function sweeps(candles: Candle[], sw: Swing[], atrValue: number) {
+  const out: { type: "buy-side" | "sell-side"; level: number; barsAgo: number }[] = [];
+  const n = candles.length;
+  for (let i = Math.max(1, n - 30); i < n; i++) {
+    const c = candles[i]!;
+    for (const s of sw) {
+      if (s.index >= i - 1) continue;
+      if (s.kind === "high" && c.high > s.price && c.close < s.price && c.high - s.price < atrValue * 3)
+        out.push({ type: "buy-side", level: Number(s.price.toFixed(2)), barsAgo: n - 1 - i });
+      if (s.kind === "low" && c.low < s.price && c.close > s.price && s.price - c.low < atrValue * 3)
+        out.push({ type: "sell-side", level: Number(s.price.toFixed(2)), barsAgo: n - 1 - i });
+    }
+  }
+  return out.sort((a, b) => a.barsAgo - b.barsAgo).slice(0, 3);
+}
+
+/** RSI divergence against the last two swings in the same direction. */
+function divergence(candles: Candle[]) {
+  const closes = candles.map((c) => c.close);
+  const rsiAt = (end: number) => rsi(closes.slice(0, end), 14);
+  const n = candles.length;
+  const a = n - 1;
+  const b = n - 11;
+  if (b < 30) return "none";
+  const priceUp = closes[a]! > closes[b]!;
+  const rsiUp = rsiAt(a) > rsiAt(b);
+  if (priceUp && !rsiUp) return "bearish divergence";
+  if (!priceUp && rsiUp) return "bullish divergence";
+  return "none";
+}
+
+/** Volume-weighted value area: where most of the recent business was done. */
+function valueArea(candles: Candle[]) {
+  const window = candles.slice(-120);
+  if (!window.length) return null;
+  const high = Math.max(...window.map((c) => c.high));
+  const low = Math.min(...window.map((c) => c.low));
+  const buckets = 24;
+  const step = (high - low) / buckets || 1;
+  const vol = new Array(buckets).fill(0) as number[];
+  for (const c of window) {
+    const idx = Math.min(buckets - 1, Math.max(0, Math.floor((c.close - low) / step)));
+    vol[idx] = vol[idx]! + (c.volume || 1);
+  }
+  const total = vol.reduce((x, y) => x + y, 0);
+  const pocIdx = vol.indexOf(Math.max(...vol));
+  let acc = vol[pocIdx]!;
+  let lo = pocIdx;
+  let hi = pocIdx;
+  while (acc < total * 0.7 && (lo > 0 || hi < buckets - 1)) {
+    const down = lo > 0 ? vol[lo - 1]! : -1;
+    const up = hi < buckets - 1 ? vol[hi + 1]! : -1;
+    if (up >= down) acc += vol[++hi]!;
+    else acc += vol[--lo]!;
+  }
+  return {
+    poc: Number((low + (pocIdx + 0.5) * step).toFixed(2)),
+    valueAreaHigh: Number((low + (hi + 1) * step).toFixed(2)),
+    valueAreaLow: Number((low + lo * step).toFixed(2)),
+  };
+}
+
+/** Today's Asian / London / NY ranges plus the prior day high-low. */
+function sessionRanges(candles: Candle[]) {
+  const now = new Date();
+  const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const inWindow = (t: number, from: number, to: number) => {
+    const h = new Date(t).getUTCHours();
+    return t >= dayStart && h >= from && h < to;
+  };
+  const range = (from: number, to: number) => {
+    const sel = candles.filter((c) => inWindow(c.time, from, to));
+    if (!sel.length) return null;
+    return {
+      high: Number(Math.max(...sel.map((c) => c.high)).toFixed(2)),
+      low: Number(Math.min(...sel.map((c) => c.low)).toFixed(2)),
+    };
+  };
+  const prior = candles.filter((c) => c.time < dayStart && c.time >= dayStart - 86400000);
+  return {
+    asian: range(0, 7),
+    london: range(7, 12),
+    newYork: range(12, 17),
+    priorDay: prior.length
+      ? {
+          high: Number(Math.max(...prior.map((c) => c.high)).toFixed(2)),
+          low: Number(Math.min(...prior.map((c) => c.low)).toFixed(2)),
+        }
+      : null,
+  };
+}
+
+/** Realised volatility regime — tells the model whether to expect expansion. */
+function volatility(candles: Candle[], atrValue: number) {
+  const older = atr(candles.slice(0, -20), 14);
+  const ratio = older > 0 ? atrValue / older : 1;
+  return {
+    atrNow: Number(atrValue.toFixed(2)),
+    atrPrior: Number(older.toFixed(2)),
+    regime: ratio > 1.25 ? "expanding" : ratio < 0.8 ? "compressing" : "stable",
+    suggestedStopDistance: Number((atrValue * 1.3).toFixed(2)),
+  };
+}
+
+
 export function computeTechnicals(candles: Candle[]) {
   const closes = candles.map((c) => c.close);
   const price = closes[closes.length - 1]!;
@@ -305,6 +411,11 @@ export function computeTechnicals(candles: Candle[]) {
       fairValueGaps: fairValueGaps(candles, price),
       orderBlocks: orderBlocks(candles, price, a),
       ...liquidity(sw, a),
+      recentSweeps: sweeps(candles, sw, a),
+      divergence: divergence(candles),
+      valueArea: valueArea(candles),
+      sessionRanges: sessionRanges(candles),
+      volatility: volatility(candles, a),
       session: session(),
       confluence: {
         bullish: bullFactors,
@@ -363,5 +474,66 @@ export async function fetchGoldMarket(interval: string, limit = 300) {
       low: Number((ticker.low + offset).toFixed(2)),
     },
     spot,
+  };
+}
+
+/**
+ * Higher-timeframe context. Real desks never trade a 15m chart blind — this
+ * returns a compact bias summary for each higher frame so the analyst can
+ * demand top-down alignment before calling a setup valid.
+ */
+export async function fetchHtfSummaries(offset: number, timeframes: string[]) {
+  const results = await Promise.all(
+    timeframes.map(async (tf) => {
+      try {
+        const raw = await fetchCandles(tf, 300);
+        const shifted = raw.map((c) => ({
+          ...c,
+          open: c.open + offset,
+          high: c.high + offset,
+          low: c.low + offset,
+          close: c.close + offset,
+        }));
+        const t = computeTechnicals(shifted);
+        return {
+          timeframe: tf,
+          trend: t.trend,
+          structureBias: t.smc.structure.bias,
+          structureEvent: t.smc.structure.event,
+          zone: t.smc.dealingRange.zone,
+          rangeHigh: t.smc.dealingRange.rangeHigh,
+          rangeLow: t.smc.dealingRange.rangeLow,
+          ema200: t.ema200,
+          rsi14: t.rsi14,
+          netBias: t.smc.confluence.netBias,
+          nearestFvg: t.smc.fairValueGaps[0] ?? null,
+          nearestOrderBlock: t.smc.orderBlocks[0] ?? null,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const frames = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  const votes = frames.map((f) => f.netBias);
+  const bull = votes.filter((v) => v === "bullish").length;
+  const bear = votes.filter((v) => v === "bearish").length;
+  return {
+    frames,
+    alignment: {
+      bullishFrames: bull,
+      bearishFrames: bear,
+      totalFrames: frames.length,
+      verdict:
+        bull === frames.length && frames.length > 0
+          ? "fully aligned bullish"
+          : bear === frames.length && frames.length > 0
+            ? "fully aligned bearish"
+            : bull > bear
+              ? "leaning bullish, not aligned"
+              : bear > bull
+                ? "leaning bearish, not aligned"
+                : "conflicted",
+    },
   };
 }
