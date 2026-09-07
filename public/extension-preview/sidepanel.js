@@ -283,6 +283,56 @@ async function post(body) {
   throw lastErr || new Error("Network error");
 }
 
+/* ---------- price chart ---------- */
+
+function drawChart(points) {
+  const svg = $("chart");
+  if (!svg) return;
+  if (!points || points.length < 2) {
+    svg.innerHTML = "";
+    return;
+  }
+  const W = 300;
+  const H = 96;
+  const pad = 6;
+  const vals = points.map((p) => p.c);
+  let min = Math.min(...vals);
+  let max = Math.max(...vals);
+  if (max === min) {
+    max += 1;
+    min -= 1;
+  }
+  const span = max - min;
+  const x = (i) => (i / (points.length - 1)) * W;
+  const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
+
+  let line = "";
+  points.forEach((p, i) => {
+    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(p.c).toFixed(2)} `;
+  });
+  const area = `${line}L${W} ${H} L0 ${H} Z`;
+  const up = vals[vals.length - 1] >= vals[0];
+  const stroke = up ? "#c9a227" : "#c0553f";
+  const lastX = W;
+  const lastY = y(vals[vals.length - 1]);
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="chfill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${stroke}" stop-opacity="0.28" />
+        <stop offset="100%" stop-color="${stroke}" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    <line class="chart-grid" x1="0" y1="${(H / 2).toFixed(1)}" x2="${W}" y2="${(H / 2).toFixed(1)}" />
+    <path d="${area}" fill="url(#chfill)" />
+    <path d="${line.trim()}" fill="none" stroke="${stroke}" stroke-width="1.6"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+    <circle cx="${(lastX - 1.5).toFixed(2)}" cy="${lastY.toFixed(2)}" r="2.6" fill="${stroke}" />
+  `;
+  $("chhigh").textContent = max.toFixed(2);
+  $("chlow").textContent = min.toFixed(2);
+}
+
 let lastPrice = null;
 
 async function loadSnapshot() {
@@ -308,6 +358,7 @@ async function loadSnapshot() {
     const t = new Date();
     $("updated").textContent = `Live · updated ${t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
     $("dot").className = "dot live";
+    drawChart(d.chart);
   } catch (e) {
     $("updated").textContent = `Reconnecting… (${e.message})`;
     $("dot").className = "dot off";
