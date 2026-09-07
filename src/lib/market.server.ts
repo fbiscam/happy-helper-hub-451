@@ -476,3 +476,64 @@ export async function fetchGoldMarket(interval: string, limit = 300) {
     spot,
   };
 }
+
+/**
+ * Higher-timeframe context. Real desks never trade a 15m chart blind — this
+ * returns a compact bias summary for each higher frame so the analyst can
+ * demand top-down alignment before calling a setup valid.
+ */
+export async function fetchHtfSummaries(offset: number, timeframes: string[]) {
+  const results = await Promise.all(
+    timeframes.map(async (tf) => {
+      try {
+        const raw = await fetchCandles(tf, 300);
+        const shifted = raw.map((c) => ({
+          ...c,
+          open: c.open + offset,
+          high: c.high + offset,
+          low: c.low + offset,
+          close: c.close + offset,
+        }));
+        const t = computeTechnicals(shifted);
+        return {
+          timeframe: tf,
+          trend: t.trend,
+          structureBias: t.smc.structure.bias,
+          structureEvent: t.smc.structure.event,
+          zone: t.smc.dealingRange.zone,
+          rangeHigh: t.smc.dealingRange.rangeHigh,
+          rangeLow: t.smc.dealingRange.rangeLow,
+          ema200: t.ema200,
+          rsi14: t.rsi14,
+          netBias: t.smc.confluence.netBias,
+          nearestFvg: t.smc.fairValueGaps[0] ?? null,
+          nearestOrderBlock: t.smc.orderBlocks[0] ?? null,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const frames = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  const votes = frames.map((f) => f.netBias);
+  const bull = votes.filter((v) => v === "bullish").length;
+  const bear = votes.filter((v) => v === "bearish").length;
+  return {
+    frames,
+    alignment: {
+      bullishFrames: bull,
+      bearishFrames: bear,
+      totalFrames: frames.length,
+      verdict:
+        bull === frames.length && frames.length > 0
+          ? "fully aligned bullish"
+          : bear === frames.length && frames.length > 0
+            ? "fully aligned bearish"
+            : bull > bear
+              ? "leaning bullish, not aligned"
+              : bear > bull
+                ? "leaning bearish, not aligned"
+                : "conflicted",
+    },
+  };
+}
