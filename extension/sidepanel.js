@@ -84,6 +84,7 @@ function loadThread(id) {
   el.innerHTML = "";
   if (!t.messages.length) emptyState();
   t.messages.forEach((m) => addMsg(m.cls, m.text));
+  updateQuickVisibility();
   $("historyPanel").classList.add("hidden");
   persist();
 }
