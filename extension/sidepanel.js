@@ -303,7 +303,7 @@ function hideShareCard() {
 }
 
 function refreshThumb() {
-  const shot = captureFrame();
+  const shot = grabFrame();
   if (shot) $("shthumb").src = shot;
 }
 
