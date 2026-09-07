@@ -527,7 +527,7 @@ async function send(preset, silentUser) {
     addMsg("ai err", "Screen frame nahi mil paaya. Share dobara start karein (stop ✕ dabayein, phir Share screen).");
     return;
   }
-  if (!silentUser) { addMsg("user", text, shot || chartImage || undefined); saveMessage("user", text); }
+  if (!silentUser) { addMsg("user", text, chartImage || undefined); saveMessage("user", text); }
 
   const pend = addMsg("ai", "");
   pend.textContent = "Thinking...";

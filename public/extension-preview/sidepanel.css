@@ -168,7 +168,7 @@ button.hbtn:hover{color:var(--blue);background:var(--blue-soft);border-color:#c6
 .sharecard.hidden { display: none; }
 .sharecard-thumb {
   width: 46px; height: 34px; flex: 0 0 auto;
-  object-fit: cover; border-radius: 6px;
+  object-fit: contain; border-radius: 6px; padding: 6px; background: #fff;
   background: rgba(255,255,255,.06);
 }
 .sharecard-body { min-width: 0; flex: 1 1 auto; }
