@@ -348,6 +348,7 @@ $("file").onchange = (e) => {
   r.onload = () => {
     chartImage = String(r.result);
     $("attached").classList.remove("hidden");
+    updateQuickVisibility();
   };
   r.readAsDataURL(f);
 };
@@ -355,6 +356,7 @@ $("clear").onclick = () => {
   chartImage = null;
   $("file").value = "";
   $("attached").classList.add("hidden");
+  updateQuickVisibility();
 };
 
 const box = $("q");
