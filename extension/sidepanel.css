@@ -54,8 +54,7 @@ h1 { font-size: 18px; font-weight: 500; margin: 0; letter-spacing: 0; }
 .trend { border-radius: 999px; padding: 4px 8px; background: var(--surface-strong); color: var(--muted); font-size: 10px; font-weight: 500; }
 .trend.bull { background: var(--bull-soft); color: var(--bull); }
 .trend.bear { background: var(--bear-soft); color: var(--bear); }
-.quote { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
-.tf-row { display: flex; justify-content: flex-end; align-items: center; margin-top: 6px; }
+.quote { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
 .quote-left { display: flex; align-items: baseline; gap: 3px; }
 .currency { font-size: 22px; font-weight: 500; line-height: 1.2; }
 .hprice { font-size: 25px; line-height: 1.2; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
