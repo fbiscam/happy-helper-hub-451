@@ -303,7 +303,10 @@ export const Route = createFileRoute("/api/public/gold")({
             Boolean(shot),
           );
           if ("error" in result) return json(request, { error: result.error }, result.status);
-          return json(request, { text: result.text, ticker, technicals, model: result.model });
+          const reviewed = market
+            ? await seniorReview(key, context, result.text, body.question)
+            : result.text;
+          return json(request, { text: reviewed, ticker, technicals, model: result.model });
         }
 
         const mode = body.mode ?? "technical";
@@ -330,7 +333,10 @@ export const Route = createFileRoute("/api/public/gold")({
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
-        return json(request, { text: result.text, ticker, technicals, model: result.model });
+        const finalText = market
+          ? await seniorReview(key, context, result.text, body.question)
+          : result.text;
+        return json(request, { text: finalText, ticker, technicals, model: result.model });
       },
     },
   },
