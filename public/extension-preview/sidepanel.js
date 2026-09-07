@@ -18,7 +18,7 @@ const QUICKS = [
 
 const $ = (id) => document.getElementById(id);
 
-let timeframe = "1h";
+let timeframe = "15m";
 let chartImage = null;
 let stream = null;
 let watchTimer = null;
