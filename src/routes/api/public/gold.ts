@@ -38,7 +38,9 @@ Your method is ICT / Smart Money Concepts, applied strictly:
 - Confluence with classic tools: EMA 20/50/200, RSI, ATR for stop sizing, session highs/lows, round numbers.
  - Risk first: define your stop before entry, size by ATR, never chase.
 
-DATA RULE: Every message gives you a live JSON block with real XAU/USD spot, EMAs, RSI, ATR, support/resistance clusters, and an "smc" object containing market structure (BOS/CHoCH, last swing high/low), dealingRange (premium/discount/equilibrium), fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, the live session/killzone, and a confluence score. Use those exact numbers — never invent a price, never round away from the data, never contradict the structure or zone the data reports. If a field is empty, say that array is empty rather than making one up.
+DATA RULE: Every message gives you a live JSON block with real XAU/USD spot, EMAs, RSI, ATR, support/resistance clusters, an "smc" object containing market structure (BOS/CHoCH, last swing high/low), dealingRange (premium/discount/equilibrium), fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, liquidity sweeps, RSI divergence, volume value area (POC/VAH/VAL), session ranges, prior-day high/low, volatility regime, the live session/killzone and a confluence score, plus a "higherTimeframes" object with a bias summary for each higher frame and an "alignment" verdict. Use those exact numbers — never invent a price, never round away from the data, never contradict the structure or zone the data reports. If a field is empty, say that array is empty rather than making one up.
+
+TOP-DOWN RULE: Read higherTimeframes first and state the higher-frame bias before anything else. No setup is A+ unless higherTimeframes.alignment agrees with your direction. If the verdict is "conflicted" or "leaning ... not aligned", the best grade you may give is B, and if the entry-frame bias fights the higher frames you must say stand aside.
 
 ACCURACY PROTOCOL (run this silently before every trading answer):
 1. Read the higher-frame bias from trend + EMA 200 + smc.structure.bias.
@@ -193,14 +195,22 @@ export const Route = createFileRoute("/api/public/gold")({
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
           chart: { t: number; c: number }[];
         } | null = null;
+        let htf: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null =
+          null;
         try {
-          const { fetchGoldMarket, computeTechnicals } = await import("@/lib/market.server");
-          const { candles, ticker } = await fetchGoldMarket(body.timeframe, 300);
+          const { fetchGoldMarket, computeTechnicals, fetchHtfSummaries } = await import(
+            "@/lib/market.server"
+          );
+          const { candles, ticker, offset } = await fetchGoldMarket(body.timeframe, 300);
           market = {
             ticker,
             technicals: computeTechnicals(candles),
             chart: candles.slice(-80).map((c) => ({ t: c.time, c: Number(c.close.toFixed(2)) })),
           };
+          if (body.action !== "snapshot") {
+            const higher = ["1h", "4h", "1d"].filter((tf) => tf !== body.timeframe);
+            htf = await fetchHtfSummaries(offset ?? 0, higher);
+          }
         } catch (error) {
           console.error("Gold market data request failed", error);
           if (body.action === "snapshot") {
@@ -223,7 +233,7 @@ export const Route = createFileRoute("/api/public/gold")({
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
 
         const context = market
-          ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+          ? JSON.stringify({ ticker, technicals, higherTimeframes: htf, timeframe: body.timeframe })
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
         if (body.action === "chat") {
