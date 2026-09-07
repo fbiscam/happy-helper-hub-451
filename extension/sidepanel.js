@@ -70,6 +70,7 @@ function newChat() {
   $("file").value = "";
   $("attached").classList.add("hidden");
   emptyState();
+  updateQuickVisibility();
   $("historyPanel").classList.add("hidden");
   box.focus();
 }
