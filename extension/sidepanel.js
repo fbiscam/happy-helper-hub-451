@@ -388,7 +388,7 @@ async function send(preset, silentUser) {
 
   const pend = addMsg("ai", "");
   pend.classList.add("typing");
-  pend.textContent = "Thinking…";
+  pend.textContent = "Thinking...";
 
   try {
     const d = await post({
