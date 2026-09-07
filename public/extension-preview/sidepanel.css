@@ -96,7 +96,7 @@ button.share.on { background: var(--bull-soft); border-color: #b7dfc2; color: va
 .empty::before { content: "✦"; position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); font-size: 11px; }
 .empty strong { font-weight: 500; }
 
-.quick { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; margin-left: 28px; margin-top: 10px; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; margin-left: 28px; margin-top: 2px; }
 .quick button { background: var(--bg); border-color: #dadce0; font-size: 11px; padding: 6px 10px; }
 .quick button:hover { background: var(--surface); color: var(--blue); border-color: #c6dafc; }
 
