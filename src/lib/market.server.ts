@@ -411,6 +411,11 @@ export function computeTechnicals(candles: Candle[]) {
       fairValueGaps: fairValueGaps(candles, price),
       orderBlocks: orderBlocks(candles, price, a),
       ...liquidity(sw, a),
+      recentSweeps: sweeps(candles, sw, a),
+      divergence: divergence(candles),
+      valueArea: valueArea(candles),
+      sessionRanges: sessionRanges(candles),
+      volatility: volatility(candles, a),
       session: session(),
       confluence: {
         bullish: bullFactors,
