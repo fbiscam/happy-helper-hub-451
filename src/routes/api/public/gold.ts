@@ -112,7 +112,7 @@ async function callAi(
       return { error: message ?? "BluesMind credits exhausted.", status: 402 };
     }
     if (res.status === 401 || res.status === 403) {
-      return { error: message ?? "BluesMind API key ya access valid nahi hai.", status: res.status };
+      return { error: message ?? "BluesMind API key or access is not valid.", status: res.status };
     }
     return { error: message ?? `BluesMind request failed [${res.status}]`, status: res.status };
   }
