@@ -18,10 +18,10 @@ const Body = z.object({
 
 const MODE_PROMPT: Record<string, string> = {
   technical:
-    "Do a technical read: market structure (BOS/CHoCH), trend, momentum, key support/resistance, and what invalidates the view.",
+    "Do a full technical read using the smc data: market structure (BOS/CHoCH), premium vs discount of the dealing range, nearest unmitigated FVG and order block, where buy-side and sell-side liquidity rests, the live session/killzone, momentum, and what invalidates the view. Finish with the confluence score and your honest bias.",
   sentiment:
     "Give a macro & sentiment read for gold right now: rates, USD, risk appetite, typical drivers. Be explicit that you have no live news feed and reason from the price action plus general macro knowledge.",
-  plan: "Give a concrete trade plan: bias, entry zone (POI), stop loss, TP1/TP2, risk-reward, and conditions to stand aside.",
+  plan: "Give a concrete trade plan built from the smc data: bias, entry POI (name the OB/FVG), stop loss sized from ATR, TP1/TP2 at the liquidity pools, risk-reward, setup grade with confidence, and conditions to stand aside. If confluence is mixed, say stand aside instead of forcing a setup.",
 };
 
 const EXPERT_SYSTEM = `LANGUAGE RULE (highest priority, no exceptions): ALWAYS write every reply 100% in English, even if the user writes in Urdu, Roman Urdu, Hindi, Arabic or any other language. Never mix languages, never translate back, never use non-English words.
