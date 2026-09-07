@@ -329,8 +329,6 @@ function drawChart(points) {
       stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
     <circle cx="${(lastX - 1.5).toFixed(2)}" cy="${lastY.toFixed(2)}" r="2.6" fill="${stroke}" />
   `;
-  $("chhigh").textContent = max.toFixed(2);
-  $("chlow").textContent = min.toFixed(2);
 }
 
 let lastPrice = null;
