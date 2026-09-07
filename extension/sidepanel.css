@@ -193,6 +193,9 @@ button.hbtn:hover{color:var(--blue);background:var(--blue-soft);border-color:#c6
 .chartbox {
   position: relative;
   margin-top: 10px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
 }
 .chart {
   display: block;
