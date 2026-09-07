@@ -84,6 +84,7 @@ button.share.on { background: var(--bull-soft); border-color: #b7dfc2; color: va
 .muted { color: var(--muted); }
 
 .thread { padding: 17px 0 10px; display: flex; flex-direction: column; gap: 15px; min-height: 160px; }
+.thread.has-empty { min-height: 0; padding-bottom: 0; }
 .msg { max-width: 94%; line-height: 1.56; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: #FAFAFA; color: #000000; border-radius: 18px 18px 5px 18px; padding: 9px 13px; }
 .msg.ai { align-self: flex-start; position: relative; padding-left: 32px; }
