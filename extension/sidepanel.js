@@ -115,7 +115,7 @@ function renderHistoryList() {
   const c = $("historyList");
   c.innerHTML = "";
   if (!threads.length) {
-    c.innerHTML = '<div class="history-empty">Abhi koi purani chat nahi hai.<br>Nayi chat shuru karein — yahan save ho jayegi.</div>';
+    c.innerHTML = '<div class="history-empty">No past chats yet.<br>Start a new chat — it will be saved here.</div>';
     return;
   }
   threads.forEach((t) => {
@@ -322,7 +322,7 @@ $("share").onclick = async () => {
     $("watchwrap").classList.remove("hidden");
     updateQuickVisibility();
   } catch (e) {
-    $("shstate").textContent = "Screen share cancel ho gaya";
+    $("shstate").textContent = "Screen share cancelled";
     stream = null;
     updateQuickVisibility();
   }
@@ -333,7 +333,7 @@ $("watch").onchange = (e) => {
   watchTimer = null;
   if (e.target.checked && stream) {
     watchTimer = setInterval(() => {
-      if (!busy) send("Screen par ab kya change hua? Short update do — structure, level, action.", true);
+      if (!busy) send("What changed on the screen now? Give a short update — structure, level, action.", true);
     }, 45000);
   }
 };
