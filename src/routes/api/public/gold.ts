@@ -160,18 +160,18 @@ export const Route = createFileRoute("/api/public/gold")({
         }
 
         let market: {
-          ticker: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchTicker"]>>;
+          ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
+          chart: { t: number; c: number }[];
         } | null = null;
         try {
-          const { fetchCandles, fetchTicker, computeTechnicals } = await import(
-            "@/lib/market.server"
-          );
-          const [candles, ticker] = await Promise.all([
-            fetchCandles(body.timeframe, 300),
-            fetchTicker(),
-          ]);
-          market = { ticker, technicals: computeTechnicals(candles) };
+          const { fetchGoldMarket, computeTechnicals } = await import("@/lib/market.server");
+          const { candles, ticker } = await fetchGoldMarket(body.timeframe, 300);
+          market = {
+            ticker,
+            technicals: computeTechnicals(candles),
+            chart: candles.slice(-80).map((c) => ({ t: c.time, c: Number(c.close.toFixed(2)) })),
+          };
         } catch (error) {
           console.error("Gold market data request failed", error);
           if (body.action === "snapshot") {
@@ -186,8 +186,9 @@ export const Route = createFileRoute("/api/public/gold")({
         const technicals = market?.technicals ?? null;
 
         if (body.action === "snapshot") {
-          return json(request, { ticker, technicals, timeframe: body.timeframe });
+          return json(request, { ticker, technicals, chart: market?.chart ?? [], timeframe: body.timeframe });
         }
+
 
         const key = process.env["BLUESMIND_API_KEY"];
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
