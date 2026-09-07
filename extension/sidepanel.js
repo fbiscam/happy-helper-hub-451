@@ -144,7 +144,6 @@ $("historybtn").onclick = () => {
 };
 $("historyClose").onclick = () => $("historyPanel").classList.add("hidden");
 
-const $ = (id) => document.getElementById(id);
 
 function renderTabs() {
   const c = $("tfs");
