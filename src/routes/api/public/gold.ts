@@ -202,7 +202,7 @@ export const Route = createFileRoute("/api/public/gold")({
             {
               type: "text",
               text:
-                `Live gold data (PAXG/USDT, tracks XAU/USD, timeframe ${body.timeframe}):\n${context}\n\n` +
+                `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${context}\n\n` +
                 (body.screenImage || body.chartImage
                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
                   : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
@@ -237,7 +237,7 @@ export const Route = createFileRoute("/api/public/gold")({
           {
             type: "text",
             text:
-              `${MODE_PROMPT[mode]}\n\nLive gold (PAXG/USDT, tracks XAU/USD) data:\n${context}` +
+              `${MODE_PROMPT[mode]}\n\nLive gold (XAU/USD spot) data:\n${context}` +
               (body.question ? `\n\nUser question: ${body.question}` : "") +
               (body.chartImage ? "\n\nAlso read the attached chart screenshot." : ""),
           },
