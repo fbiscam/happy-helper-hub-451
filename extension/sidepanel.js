@@ -222,6 +222,7 @@ function addMsg(cls, text, shot) {
     t.classList.remove("has-empty");
   }
   t.appendChild(d);
+  updateQuickVisibility();
   t.scrollTop = t.scrollHeight;
   return d;
 }
