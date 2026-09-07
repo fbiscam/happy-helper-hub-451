@@ -54,14 +54,15 @@ h1 { font-size: 17px; font-weight: 500; margin: 0; letter-spacing: 0; }
 .trend { border-radius: 999px; padding: 4px 8px; background: var(--surface-strong); color: var(--muted); font-size: 10px; font-weight: 500; }
 .trend.bull { background: var(--bull-soft); color: var(--bull); }
 .trend.bear { background: var(--bear-soft); color: var(--bear); }
-.quote { display: flex; align-items: baseline; gap: 5px; margin-top: 9px; }
+.quote { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+.quote-left { display: flex; align-items: baseline; gap: 5px; }
 .currency { font-size: 17px; font-weight: 400; }
 .hprice { font-size: 25px; line-height: 1.2; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .hchange { margin-left: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .hchange.bull { color: var(--bull); }
 .hchange.bear { color: var(--bear); }
 
-.row { display: flex; gap: 4px; margin-top: 13px; padding: 3px; border-radius: 10px; background: var(--surface-strong); }
+.row { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-strong); }
 .row button.tab { flex: 1; }
 button {
   cursor: pointer; border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
