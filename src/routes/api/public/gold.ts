@@ -172,6 +172,41 @@ async function callAi(
   return { text, model };
 }
 
+const REVIEWER_SYSTEM = `You are the senior desk reviewer: 25+ years institutional experience in ICT / Smart Money Concepts. A junior analyst has produced a draft read of XAU/USD. You also receive the desk engine output (market structure, premium/discount, FVGs, order blocks, liquidity pools and sweeps, RSI divergence, volume POC/VAH/VAL, session ranges, prior-day high/low, ATR and volatility regime, confluence score, higher-timeframe bias).
+
+Your job:
+1. Verify every number and level in the draft against the engine data. Silently correct anything that does not match; never invent levels.
+2. Check top-down alignment. If the entry-frame idea fights the higher-timeframe bias, downgrade the grade or change the call to stand aside.
+3. Check risk: stop distance must respect ATR, and risk-reward must be at least 1:2 or the setup is not tradable.
+4. Remove hype, hedging and filler. Keep the structure the desk uses: a short opening paragraph, Title Case headings, full sentences, and a numbered trade plan (Bias, Entry, Stop Loss, Targets, Risk-Reward, Setup Grade, Invalidation) with key numbers in bold.
+
+Output ONLY the final corrected answer for the user. Do not mention the draft, the review, yourself, or that any correction happened. If the draft is just a greeting or a short casual reply, return it as-is.`;
+
+async function seniorReview(
+  key: string,
+  context: string,
+  draft: string,
+  question: string | undefined,
+) {
+  const review = await callAi(
+    key,
+    [
+      { role: "system", content: REVIEWER_SYSTEM },
+      {
+        role: "user",
+        content:
+          `Desk engine data (ICT/SMC):\n${context}\n\n` +
+          (question ? `User asked: ${question}\n\n` : "") +
+          `Junior analyst draft:\n${draft}`,
+      },
+    ],
+    1800,
+    false,
+  );
+  if ("error" in review) return draft;
+  return review.text;
+}
+
 export const Route = createFileRoute("/api/public/gold")({
   server: {
     handlers: {
@@ -268,7 +303,10 @@ export const Route = createFileRoute("/api/public/gold")({
             Boolean(shot),
           );
           if ("error" in result) return json(request, { error: result.error }, result.status);
-          return json(request, { text: result.text, ticker, technicals, model: result.model });
+          const reviewed = market
+            ? await seniorReview(key, context, result.text, body.question)
+            : result.text;
+          return json(request, { text: reviewed, ticker, technicals, model: result.model });
         }
 
         const mode = body.mode ?? "technical";
@@ -295,7 +333,10 @@ export const Route = createFileRoute("/api/public/gold")({
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
-        return json(request, { text: result.text, ticker, technicals, model: result.model });
+        const finalText = market
+          ? await seniorReview(key, context, result.text, body.question)
+          : result.text;
+        return json(request, { text: finalText, ticker, technicals, model: result.model });
       },
     },
   },
