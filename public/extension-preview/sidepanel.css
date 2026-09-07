@@ -127,7 +127,6 @@ video, canvas { display: none; }
   header { padding-inline: 12px; }
   .content { padding-inline: 12px; }
   .sub { display: none; }
-  .intro h2 { font-size: 17px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
