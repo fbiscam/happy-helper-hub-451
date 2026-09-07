@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jenvu — ICT/SMC Gold Analyst",
-  "version": "1.4.0",
-  "description": "Draggable floating panel: share your screen and get live ICT/SMC gold (XAU/USD) analysis on any page.",
+  "version": "1.5.0",
+  "description": "Side panel: share your screen and get live ICT/SMC gold (XAU/USD) analysis on any page.",
   "permissions": [
     "sidePanel",
     "tabs",
@@ -22,27 +22,6 @@
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle",
-      "all_frames": false
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "sidepanel.html",
-        "sidepanel.css",
-        "sidepanel.js",
-        "jenvu-logo.png",
-        "icon.png",
-        "fonts/*"
-      ],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "icons": {
     "48": "icon.png",
     "128": "icon.png"
