@@ -109,10 +109,10 @@ async function callAi(
       return { error: message ?? "BluesMind rate limit — please try again shortly.", status: 429 };
     }
     if (res.status === 402) {
-      return { error: message ?? "BluesMind credits khatam ho gaye.", status: 402 };
+      return { error: message ?? "BluesMind credits exhausted.", status: 402 };
     }
     if (res.status === 401 || res.status === 403) {
-      return { error: message ?? "BluesMind API key ya access valid nahi hai.", status: res.status };
+      return { error: message ?? "BluesMind API key or access is not valid.", status: res.status };
     }
     return { error: message ?? `BluesMind request failed [${res.status}]`, status: res.status };
   }
@@ -184,7 +184,7 @@ export const Route = createFileRoute("/api/public/gold")({
                 (body.screenImage
                   ? "The image below is the user's shared browser screen right now — read the chart/content on it and answer accordingly.\n\n"
                   : "") +
-                `User: ${body.question ?? "Screen ko parho aur ab kya karna chahiye batao."}`,
+                `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
             },
           ];
           const shot = body.screenImage ?? body.chartImage;
