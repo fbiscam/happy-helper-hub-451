@@ -294,6 +294,42 @@ function grabFrame() {
   return cv.toDataURL("image/jpeg", 0.7);
 }
 
+let thumbTimer = null;
+
+function hideShareCard() {
+  $("sharecard").classList.add("hidden");
+  if (thumbTimer) clearInterval(thumbTimer);
+  thumbTimer = null;
+}
+
+function refreshThumb() {
+  const shot = captureFrame();
+  if (shot) $("shthumb").src = shot;
+}
+
+async function showShareCard() {
+  $("sharecard").classList.remove("hidden");
+  $("shtitle").textContent = "Shared screen";
+  $("shurl").textContent = "Live screen share";
+  try {
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const t = tabs && tabs[0];
+      if (t) {
+        if (t.title) $("shtitle").textContent = t.title;
+        if (t.url) {
+          try { $("shurl").textContent = new URL(t.url).hostname + new URL(t.url).pathname; }
+          catch (e) { $("shurl").textContent = t.url; }
+        }
+        if (t.favIconUrl) $("shthumb").src = t.favIconUrl;
+      }
+    }
+  } catch (e) {}
+  setTimeout(refreshThumb, 800);
+  if (thumbTimer) clearInterval(thumbTimer);
+  thumbTimer = setInterval(refreshThumb, 5000);
+}
+
 function stopShare() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null;
@@ -304,6 +340,7 @@ function stopShare() {
   $("share").textContent = "Share screen";
   $("share").classList.remove("on");
   $("shstate").textContent = "Screen off";
+  hideShareCard();
   updateQuickVisibility();
 }
 
@@ -320,6 +357,7 @@ $("share").onclick = async () => {
     $("share").classList.add("on");
     $("shstate").textContent = "Screen live";
     $("watchwrap").classList.remove("hidden");
+    showShareCard();
     updateQuickVisibility();
   } catch (e) {
     $("shstate").textContent = "Screen share cancelled";
@@ -327,6 +365,8 @@ $("share").onclick = async () => {
     updateQuickVisibility();
   }
 };
+
+$("shstop").onclick = () => stopShare();
 
 $("watch").onchange = (e) => {
   if (watchTimer) clearInterval(watchTimer);
