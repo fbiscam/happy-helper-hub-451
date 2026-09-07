@@ -319,9 +319,11 @@ $("share").onclick = async () => {
     $("share").classList.add("on");
     $("shstate").textContent = "Screen live";
     $("watchwrap").classList.remove("hidden");
+    updateQuickVisibility();
   } catch (e) {
     $("shstate").textContent = "Screen share cancel ho gaya";
     stream = null;
+    updateQuickVisibility();
   }
 };
 
