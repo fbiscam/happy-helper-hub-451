@@ -170,7 +170,7 @@ function fairValueGaps(candles: Candle[], price: number, take = 4) {
     if (c.high < a.low) gaps.push({ type: "bearish", from: c.high, to: a.low, mid: (c.high + a.low) / 2 });
   }
   // keep gaps price has not fully traded back through
-  const later = (g: { from: number; to: number }) => Math.abs(g.mid - price) > 0;
+  const later = (g: { mid: number }) => Math.abs(g.mid - price) > 0;
   return gaps
     .filter(later)
     .sort((x, y) => Math.abs(x.mid - price) - Math.abs(y.mid - price))
