@@ -1,8 +1,8 @@
 const ENDPOINTS =
   location.protocol === "chrome-extension:"
     ? [
-        "https://project--e6504850-5ce1-48e5-b564-6e4bbb878c19.lovable.app/api/public/gold",
-        "https://project--e6504850-5ce1-48e5-b564-6e4bbb878c19-dev.lovable.app/api/public/gold",
+        "https://project--9fc0698e-7373-4bdf-b90d-fe4ff903454b.lovable.app/api/public/gold",
+        "https://project--9fc0698e-7373-4bdf-b90d-fe4ff903454b-dev.lovable.app/api/public/gold",
       ]
     : ["/api/public/gold"];
 let API = ENDPOINTS[0];
