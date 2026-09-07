@@ -439,7 +439,6 @@ async function send(preset, silentUser) {
   if (!silentUser) { addMsg("user", text, shot || chartImage || undefined); saveMessage("user", text); }
 
   const pend = addMsg("ai", "");
-  pend.classList.add("typing");
   pend.textContent = "Thinking...";
 
   try {
