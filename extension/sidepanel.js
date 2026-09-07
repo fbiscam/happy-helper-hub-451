@@ -126,7 +126,7 @@ function renderHistoryList() {
     title.textContent = t.title || "Chat";
     const date = document.createElement("span");
     date.className = "hdate";
-    date.textContent = new Date(t.updatedAt).toLocaleDateString([], { day: "numeric", month: "short" });
+    date.textContent = new Date(t.updatedAt).toLocaleDateString("en-US", { day: "numeric", month: "short" });
     const del = document.createElement("button");
     del.className = "hdel";
     del.textContent = "✕";
