@@ -698,6 +698,35 @@ box.addEventListener("keydown", (e) => {
 });
 $("send").onclick = () => send();
 
+/* ---------- TradingView chart markings overlay ---------- */
+
+const MARK_INTENT = /\b(mark|draw|show|highlight|overlay|nishan)\b|mark\s*kro|draw\s*kro|dikha\s*do/i;
+const MARK_TOPIC = /\b(fvg|ob|order block|bos|choch|liquidity|liq|bsl|ssl|sweep|killzone|kill zone|price action|smc|imbalance|structure)\b/i;
+
+async function markOnPage() {
+  const d = await post({ action: "snapshot", timeframe });
+  const marks = Array.isArray(d.overlayMarks) && d.overlayMarks.length ? d.overlayMarks : (d.marks || []);
+  if (!marks.length) throw new Error("Abhi koi clear marking nahi bani.");
+  const pts = (d.chart || []).map((c) => (typeof c === "number" ? c : c.close ?? c.c ?? 0)).filter(Boolean);
+  const levels = marks.flatMap((m) => (m.kind === "zone" ? [m.from, m.to] : [m.level]));
+  const all = pts.concat(levels).filter((n) => Number.isFinite(n));
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const pad = (hi - lo) * 0.08 || 1;
+
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab?.id) throw new Error("Koi active tab nahi mila.");
+  await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+  await chrome.tabs.sendMessage(tab.id, {
+    type: "JENVU_MARK",
+    marks,
+    lo: lo - pad,
+    hi: hi + pad,
+    bias: d.marksBias ?? d.technicals?.smc?.structure?.bias ?? null,
+  });
+  return marks.length;
+}
+
 async function send(preset, silentUser) {
   if (busy) return;
   const text = (preset ?? box.value).trim();
@@ -707,6 +736,24 @@ async function send(preset, silentUser) {
   if (!preset) {
     box.value = "";
     box.style.height = "auto";
+  }
+
+  if (text && MARK_INTENT.test(text) && MARK_TOPIC.test(text)) {
+    if (!silentUser) { addMsg("user", text); saveMessage("user", text); }
+    const p = addMsg("ai", "Chart par markings laga raha hoon…");
+    try {
+      const n = await markOnPage();
+      p.remove();
+      const msg = `Aapke chart par ${n} markings laga di hain (FVG/OB zones, BOS-CHoCH, BSL/SSL, sweeps) aur killzone status upar dikh raha hai. Levels approximate hain \u2014 overlay ke toolbar se \u25b2\u25bc aur \uff0b\uff0d se align kar sakte hain, \u2715 se hata dein.`;
+      addMsg("ai", msg);
+      saveMessage("ai", msg);
+    } catch (e) {
+      p.remove();
+      addMsg("ai err", e.message || "Markings nahi lag sakin.");
+    }
+    busy = false;
+    $("send").disabled = false;
+    return;
   }
 
   let shot = grabFrame();
