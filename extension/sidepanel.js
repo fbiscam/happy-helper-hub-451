@@ -28,6 +28,7 @@ let history = [];
 /* ---------- chat threads (new chat + history) ---------- */
 
 const STORE_KEY = "jenvu_threads_v1";
+const SNAPSHOT_KEY = "jenvu_market_snapshot_v1";
 
 const store = {
   get() {
@@ -296,14 +297,19 @@ async function post(body) {
 function drawChart(points) {
   const svg = $("chart");
   if (!svg) return;
-  if (!points || points.length < 2) {
-    svg.innerHTML = "";
+  const cleanPoints = Array.isArray(points)
+    ? points.filter((point) => Number.isFinite(Number(point?.c)))
+    : [];
+  if (cleanPoints.length < 2) {
+    if (!svg.querySelector("path")) {
+      svg.innerHTML = '<text x="150" y="52" text-anchor="middle" class="chart-empty">Loading chart…</text>';
+    }
     return;
   }
   const W = 300;
   const H = 96;
   const pad = 6;
-  const vals = points.map((p) => p.c);
+  const vals = cleanPoints.map((p) => Number(p.c));
   let min = Math.min(...vals);
   let max = Math.max(...vals);
   if (max === min) {
@@ -311,12 +317,12 @@ function drawChart(points) {
     min -= 1;
   }
   const span = max - min;
-  const x = (i) => (i / (points.length - 1)) * W;
+  const x = (i) => (i / (cleanPoints.length - 1)) * W;
   const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
 
   let line = "";
-  points.forEach((p, i) => {
-    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(p.c).toFixed(2)} `;
+  cleanPoints.forEach((p, i) => {
+    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(Number(p.c)).toFixed(2)} `;
   });
   const area = `${line}L${W} ${H} L0 ${H} Z`;
   const up = vals[vals.length - 1] >= vals[0];
@@ -341,29 +347,44 @@ function drawChart(points) {
 
 let lastPrice = null;
 
+function renderSnapshot(d) {
+  const price = Number(d?.ticker?.price);
+  const changePercent = Number(d?.ticker?.changePercent);
+  if (!Number.isFinite(price) || !Array.isArray(d?.chart) || d.chart.length < 2) {
+    throw new Error("Invalid live graph data");
+  }
+  const el = $("price");
+  el.textContent = price.toFixed(2);
+  if (lastPrice !== null && price !== lastPrice) {
+    el.classList.remove("tick-up", "tick-down");
+    void el.offsetWidth;
+    el.classList.add(price > lastPrice ? "tick-up" : "tick-down");
+  }
+  lastPrice = price;
+  const safeChange = Number.isFinite(changePercent) ? changePercent : 0;
+  const up = safeChange >= 0;
+  const ch = $("change");
+  ch.textContent = `${up ? "▲" : "▼"} ${safeChange.toFixed(2)}%`;
+  ch.className = "hchange " + (up ? "bull" : "bear");
+  const trend = $("trend");
+  const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
+  trend.textContent = bias.toUpperCase();
+  trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
+  drawChart(d.chart);
+}
+
 async function loadSnapshot() {
   try {
     const d = await post({ action: "snapshot", timeframe });
-    const p = d.ticker.price;
-    const el = $("price");
-    el.textContent = p.toFixed(2);
-    if (lastPrice !== null && p !== lastPrice) {
-      el.classList.remove("tick-up", "tick-down");
-      void el.offsetWidth;
-      el.classList.add(p > lastPrice ? "tick-up" : "tick-down");
-    }
-    lastPrice = p;
-    const up = d.ticker.changePercent >= 0;
-    const ch = $("change");
-    ch.textContent = `${up ? "▲" : "▼"} ${d.ticker.changePercent.toFixed(2)}%`;
-    ch.className = "hchange " + (up ? "bull" : "bear");
-    const trend = $("trend");
-    const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
-    trend.textContent = bias.toUpperCase();
-    trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
-    drawChart(d.chart);
+    renderSnapshot(d);
+    try { chrome.storage?.local?.set({ [SNAPSHOT_KEY]: { ...d, timeframe } }); } catch { /* cache is optional */ }
   } catch (e) {
     console.warn("market pulse failed", e);
+    const trend = $("trend");
+    if (!$("chart")?.querySelector("path")) {
+      trend.textContent = "RECONNECTING";
+      trend.className = "trend";
+    }
   }
 }
 
@@ -568,6 +589,14 @@ async function send(preset, silentUser) {
 renderTabs();
 renderQuick();
 emptyState();
+try {
+  chrome.storage?.local?.get(SNAPSHOT_KEY, (saved) => {
+    const snapshot = saved?.[SNAPSHOT_KEY];
+    if (snapshot?.timeframe === timeframe) {
+      try { renderSnapshot(snapshot); } catch { /* wait for live data */ }
+    }
+  });
+} catch { /* extension storage is unavailable in web preview */ }
 loadSnapshot();
 setInterval(loadSnapshot, 5000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSnapshot(); });
