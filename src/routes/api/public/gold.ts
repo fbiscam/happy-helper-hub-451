@@ -311,6 +311,49 @@ function buildChartMarks(technicals: Technicals): ChartMark[] {
   return marks;
 }
 
+/** Full marking set for the TradingView page overlay. */
+function buildOverlayMarks(technicals: Technicals): ChartMark[] {
+  const smc = technicals.smc;
+  const marks: ChartMark[] = [];
+
+  for (const e of (smc.structure.recentEvents ?? []).slice(0, 3)) {
+    marks.push({
+      kind: "event",
+      label: e.type === "CHoCH" ? "CHoCH" : "BOS",
+      level: e.level,
+      barsAgo: e.barsAgo,
+      dir: e.direction === "bullish" ? "up" : "down",
+    });
+  }
+  for (const s of (smc.recentSweeps ?? []).slice(0, 3)) {
+    marks.push({
+      kind: "sweep",
+      label: s.type === "buy-side" ? "BSL sweep" : "SSL sweep",
+      level: s.level,
+      barsAgo: s.barsAgo,
+      tone: s.type === "buy-side" ? "sell" : "buy",
+    });
+  }
+  for (const level of (smc.buySideLiquidity ?? []).slice(-2)) {
+    marks.push({ kind: "line", label: "BSL", level, tone: "sell" });
+  }
+  for (const level of (smc.sellSideLiquidity ?? []).slice(-2)) {
+    marks.push({ kind: "line", label: "SSL", level, tone: "buy" });
+  }
+  if (smc.structure.inducement) {
+    marks.push({ kind: "line", label: "IDM", level: smc.structure.inducement.level, tone: "neutral" });
+  }
+  marks.push({ kind: "line", label: "EQ", level: smc.dealingRange.equilibrium, tone: "neutral" });
+  for (const z of smc.orderBlocks.slice(0, 2)) {
+    marks.push({ kind: "zone", label: "OB", from: z.from, to: z.to, tone: z.type === "bullish" ? "buy" : "sell" });
+  }
+  for (const g of smc.fairValueGaps.slice(0, 3)) {
+    marks.push({ kind: "zone", label: "FVG", from: g.from, to: g.to, tone: g.type === "bullish" ? "buy" : "sell" });
+  }
+  return marks;
+}
+
+
 
 function getEngineDirection(
   technicals: Technicals,
@@ -501,6 +544,7 @@ export const Route = createFileRoute("/api/public/gold")({
             technicals,
             nextCandle,
             marks: technicals ? buildChartMarks(technicals) : [],
+            overlayMarks: technicals ? buildOverlayMarks(technicals) : [],
             marksBias: technicals?.smc.structure.bias ?? null,
             chart: market?.chart ?? [],
             timeframe: body.timeframe,
