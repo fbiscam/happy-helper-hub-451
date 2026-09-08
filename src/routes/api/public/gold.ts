@@ -472,6 +472,8 @@ export const Route = createFileRoute("/api/public/gold")({
 
          if (body.action === "chat") {
            const candleIntent = CANDLE_INTENT.test(body.question ?? "");
+           const structureIntent =
+             !candleIntent && STRUCTURE_INTENT.test(body.question ?? "");
            const chatContext =
              !tradeIntent && market
                ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
@@ -483,11 +485,13 @@ export const Route = createFileRoute("/api/public/gold")({
                  `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
                  (candleIntent
                    ? "The user is asking about the NEXT CANDLE. Answer using the nextCandle object exactly: state green or red, the probability, the confidence, two or three top drivers and the invalidation level. Keep it to 2-4 short sentences and do not produce a full trade plan or a stand-aside verdict.\n\n"
+                   : structureIntent
+                   ? "The user is asking about MARKET STRUCTURE / price action (BOS, CHoCH, IDM, liquidity, OB, FVG, premium-discount). Answer strictly from technicals.smc.structure, technicals.smc.priceAction, fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, recentSweeps and dealingRange — these are computed on the live candles, so you DO have the structure of the chart. Give the exact levels and how many candles ago each event closed. If no confirmed break has printed, say so and give the exact level that must close through for the next BOS or CHoCH. Keep it to 2-5 short sentences, no full trade plan and no stand-aside verdict unless asked.\n\n"
                    : tradeIntent
                    ? ""
                    : "This is a general/educational question — answer it briefly and directly. Do NOT give a trade plan, signal, stand-aside verdict or any market-direction call unless the user asked for one.\n\n") +
                  (body.screenImage || body.chartImage
-                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
+                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it, but when it comes to structure (BOS/CHoCH/IDM/liquidity) the engine data above is authoritative over what you think you see. Never say you cannot see the screen.\n\n"
                    : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
 
                  `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
@@ -508,22 +512,23 @@ export const Route = createFileRoute("/api/public/gold")({
                ...history,
                { role: "user", content: parts },
              ],
-              tradeIntent || shot ? 1300 : 420,
+              tradeIntent || shot ? 1300 : structureIntent ? 700 : 420,
              Boolean(shot),
            );
            if ("error" in result) return json(request, { error: result.error }, result.status);
            const reviewed =
-             market && !candleIntent && shouldReview(result.text, body.question, Boolean(shot))
+             market && !candleIntent && !structureIntent && shouldReview(result.text, body.question, Boolean(shot))
                ? await seniorReview(key, context, result.text, body.question)
                : result.text;
            const finalText = enforceEngineDirection(
              reviewed,
              engineDirection,
-             !candleIntent && TRADE_INTENT.test(body.question ?? ""),
+             !candleIntent && !structureIntent && TRADE_INTENT.test(body.question ?? ""),
              technicals,
            );
           return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
+
 
         const mode = body.mode ?? "technical";
         const userContent: unknown[] = [
