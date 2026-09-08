@@ -40,6 +40,8 @@ Your method is ICT / Smart Money Concepts, applied strictly:
 
 DATA RULE: Every message gives you a live JSON block with real XAU/USD spot, EMAs, RSI, ATR, support/resistance clusters, an "smc" object containing market structure (BOS/CHoCH, last swing high/low), dealingRange (premium/discount/equilibrium), fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, liquidity sweeps, RSI divergence, volume value area (POC/VAH/VAL), session ranges, prior-day high/low, volatility regime, the live session/killzone and a confluence score, plus a "higherTimeframes" object with a bias summary for each higher frame and an "alignment" verdict. Use those exact numbers — never invent a price, never round away from the data, never contradict the structure or zone the data reports. If a field is empty, say that array is empty rather than making one up.
 
+NEXT-CANDLE RULE: The JSON also carries a "nextCandle" object from the quantitative engine: direction (green/red), probability, confidence, score, hitRate (walk-forward accuracy of that engine on this timeframe), sampleSize, expectedMove, projectedClose/High/Low, bullishFactors/bearishFactors out of totalFactors, and topDrivers. When the user asks whether the next candle will be red or green, answer with that exact direction and probability — never contradict it, never invent your own number. Keep it to 2-4 short sentences: the call, the probability and confidence, two or three drivers, and the invalidation level. Always state plainly that this is a probability from a 25-factor model, not a certainty.
+
 TOP-DOWN RULE (only when the user asks for a signal, trade idea, entry or market read — never for greetings or educational/conceptual questions): Read higherTimeframes first and state the higher-frame bias before anything else. No setup is A+ unless higherTimeframes.alignment agrees with your direction. If the verdict is "conflicted" or "leaning ... not aligned", the best grade you may give is B, and if the entry-frame bias fights the higher frames you must say stand aside.
 
 ACCURACY PROTOCOL (run this silently before every trading answer):
@@ -233,6 +235,9 @@ Output ONLY the final corrected answer for the user. Do not mention the draft, t
 const TRADE_INTENT =
   /(trade|plan|entry|buy|sell|setup|signal|scalp|target|stop loss|stop-loss|analy|read (the |my )?(chart|screen|market)|what('| i)s the market|market (now|today|update)|current price|long|short)\b/i;
 
+const CANDLE_INTENT =
+  /(next candle|agli candle|agli candel|candle (prediction|call|red|green)|red (ya|or) green|green (ya|or) red|candle banegi|candle bane)/i;
+
 type SignalDirection = "buy" | "sell" | "stand-aside";
 type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
 
@@ -394,6 +399,7 @@ export const Route = createFileRoute("/api/public/gold")({
           ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
           chart: { t: number; c: number }[];
+          nextCandle: Awaited<ReturnType<typeof import("@/lib/predict.server")["predictNextCandle"]>>;
         } | null = null;
         let htf: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null =
           null;
@@ -402,11 +408,13 @@ export const Route = createFileRoute("/api/public/gold")({
           const { fetchGoldMarket, computeTechnicals, fetchHtfSummaries } = await import(
             "@/lib/market.server"
           );
+          const { predictNextCandle } = await import("@/lib/predict.server");
           const { candles, ticker, offset } = await fetchGoldMarket(body.timeframe, 300);
           market = {
             ticker,
             technicals: computeTechnicals(candles),
             chart: candles.slice(-80).map((c) => ({ t: c.time, c: Number(c.close.toFixed(2)) })),
+            nextCandle: predictNextCandle(candles),
           };
           if (body.action !== "snapshot") {
             const higher = ["1h", "4h", "1d"].filter((tf) => tf !== body.timeframe);
@@ -424,9 +432,16 @@ export const Route = createFileRoute("/api/public/gold")({
         }
         const ticker = market?.ticker ?? null;
         const technicals = market?.technicals ?? null;
+        const nextCandle = market?.nextCandle ?? null;
 
         if (body.action === "snapshot") {
-          return json(request, { ticker, technicals, chart: market?.chart ?? [], timeframe: body.timeframe });
+          return json(request, {
+            ticker,
+            technicals,
+            nextCandle,
+            chart: market?.chart ?? [],
+            timeframe: body.timeframe,
+          });
         }
 
 
@@ -441,60 +456,64 @@ export const Route = createFileRoute("/api/public/gold")({
               ticker,
               technicals,
               higherTimeframes: htf,
+              nextCandle,
               timeframe: body.timeframe,
               authoritativeSignalDirection: engineDirection,
             })
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
          if (body.action === "chat") {
+           const candleIntent = CANDLE_INTENT.test(body.question ?? "");
            const chatContext =
              !tradeIntent && market
-               ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+               ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
                : context;
            const parts: unknown[] = [
              {
                type: "text",
                text:
                  `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
-                 (tradeIntent
+                 (candleIntent
+                   ? "The user is asking about the NEXT CANDLE. Answer using the nextCandle object exactly: state green or red, the probability, the confidence, two or three top drivers and the invalidation level. Keep it to 2-4 short sentences and do not produce a full trade plan or a stand-aside verdict.\n\n"
+                   : tradeIntent
                    ? ""
                    : "This is a general/educational question — answer it briefly and directly. Do NOT give a trade plan, signal, stand-aside verdict or any market-direction call unless the user asked for one.\n\n") +
-                (body.screenImage || body.chartImage
-                  ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
-                  : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
+                 (body.screenImage || body.chartImage
+                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
+                   : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
 
-                `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
-            },
-          ];
-          const shot = body.screenImage ?? body.chartImage;
-          if (shot) parts.push({ type: "image_url", image_url: { url: shot } });
+                 `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
+             },
+           ];
+           const shot = body.screenImage ?? body.chartImage;
+           if (shot) parts.push({ type: "image_url", image_url: { url: shot } });
 
-          const history = (body.history ?? []).map((m) => ({
-            role: m.role,
-            content: m.text,
-          }));
+           const history = (body.history ?? []).map((m) => ({
+             role: m.role,
+             content: m.text,
+           }));
 
-           const result = await callAi(
-            key,
-            [
-              { role: "system", content: EXPERT_SYSTEM },
-              ...history,
-              { role: "user", content: parts },
-            ],
-             tradeIntent || shot ? 1300 : 320,
-            Boolean(shot),
-          );
-          if ("error" in result) return json(request, { error: result.error }, result.status);
-          const reviewed =
-            market && shouldReview(result.text, body.question, Boolean(shot))
-              ? await seniorReview(key, context, result.text, body.question)
-              : result.text;
-          const finalText = enforceEngineDirection(
-            reviewed,
-            engineDirection,
-            TRADE_INTENT.test(body.question ?? ""),
-            technicals,
-          );
+            const result = await callAi(
+             key,
+             [
+               { role: "system", content: EXPERT_SYSTEM },
+               ...history,
+               { role: "user", content: parts },
+             ],
+              tradeIntent || shot ? 1300 : 420,
+             Boolean(shot),
+           );
+           if ("error" in result) return json(request, { error: result.error }, result.status);
+           const reviewed =
+             market && !candleIntent && shouldReview(result.text, body.question, Boolean(shot))
+               ? await seniorReview(key, context, result.text, body.question)
+               : result.text;
+           const finalText = enforceEngineDirection(
+             reviewed,
+             engineDirection,
+             !candleIntent && TRADE_INTENT.test(body.question ?? ""),
+             technicals,
+           );
           return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
 
