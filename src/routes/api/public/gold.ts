@@ -83,6 +83,8 @@ Greetings and simple questions get a short, friendly prose answer with no headin
 const BLUESMIND_URL = "https://api.bluesminds.com/v1/chat/completions";
 const BLUESMIND_CHAT_MODEL = "openai/gpt-oss-20b";
 const BLUESMIND_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct";
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const LOVABLE_AI_FALLBACK_MODEL = "google/gemini-3.8-flash";
 
 function isAllowedOrigin(origin: string) {
   if (origin.startsWith("chrome-extension://")) return true;
@@ -126,7 +128,7 @@ async function callAi(
   maxTokens: number,
   hasImage: boolean,
 ) {
-  const model = hasImage ? BLUESMIND_VISION_MODEL : BLUESMIND_CHAT_MODEL;
+  let model = hasImage ? BLUESMIND_VISION_MODEL : BLUESMIND_CHAT_MODEL;
   const send = async (timeoutMs: number) =>
     fetch(BLUESMIND_URL, {
       method: "POST",
@@ -139,6 +141,20 @@ async function callAi(
       signal: AbortSignal.timeout(timeoutMs),
     });
 
+  const sendFallback = async () => {
+    const fallbackKey = process.env["LOVABLE_API_KEY"];
+    if (!fallbackKey) return null;
+    model = LOVABLE_AI_FALLBACK_MODEL;
+    return fetch(LOVABLE_AI_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Lovable-API-Key": fallbackKey,
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+    });
+  };
+
   let res: Response;
   try {
     res = await send(hasImage ? 90_000 : 45_000);
@@ -147,7 +163,15 @@ async function callAi(
       res = await send(hasImage ? 60_000 : 35_000);
     }
   } catch {
-    return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
+    const fallback = await sendFallback().catch(() => null);
+    if (!fallback) {
+      return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
+    }
+    res = fallback;
+  }
+  if (res.status >= 500) {
+    const fallback = await sendFallback().catch(() => null);
+    if (fallback) res = fallback;
   }
 
 
