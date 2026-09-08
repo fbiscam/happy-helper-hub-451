@@ -212,6 +212,7 @@ function addMsg(cls, text, shot) {
     const img = document.createElement("img");
     img.src = shot;
     img.className = "shot";
+    img.addEventListener("load", () => scrollThread(true));
     d.appendChild(img);
   }
   const body = document.createElement("div");
@@ -273,7 +274,7 @@ function addMsg(cls, text, shot) {
   }
   t.appendChild(d);
   updateQuickVisibility();
-  t.scrollTop = t.scrollHeight;
+  scrollThread(ownMessage);
   return d;
 }
 
