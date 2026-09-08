@@ -161,14 +161,19 @@ async function callAi(
 
   const sendFallback = async () => {
     if (!lovableKey || useFastGateway) return null;
-    model = LOVABLE_AI_FALLBACK_MODEL;
+    model = LOVABLE_AI_MODEL;
     return fetch(LOVABLE_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Lovable-API-Key": lovableKey,
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+      body: JSON.stringify({
+        model,
+        max_completion_tokens: maxTokens,
+        reasoning_effort: "low",
+        messages,
+      }),
     });
   };
 
