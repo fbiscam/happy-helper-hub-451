@@ -451,6 +451,7 @@ export const Route = createFileRoute("/api/public/gold")({
               ticker,
               technicals,
               higherTimeframes: htf,
+              nextCandle,
               timeframe: body.timeframe,
               authoritativeSignalDirection: engineDirection,
             })
