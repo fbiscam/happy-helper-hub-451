@@ -43,10 +43,10 @@ header {
   position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
 .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.brand-mark { width: 36px; height: 36px; flex: none; object-fit: contain; }
+.brand-mark { width: 36px; height: 36px; flex: none; object-fit: contain; margin-left: -3px; }
 .brand-text { display: flex; align-items: center; gap: 5px; }
 h1 { font-size: 21px; font-weight: 500; margin: 0; letter-spacing: 0; }
-.verified-tick { width: 20px; height: 20px; flex: none; object-fit: contain; }
+.verified-tick { width: 18px; height: 18px; flex: none; object-fit: contain; }
 .sub { margin: 2px 0 0; font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
 .head-right { display: flex; align-items: center; gap: 5px; }
 
