@@ -128,28 +128,37 @@ async function callAi(
   maxTokens: number,
   hasImage: boolean,
 ) {
-  let model = hasImage ? BLUESMIND_VISION_MODEL : BLUESMIND_CHAT_MODEL;
+  const lovableKey = process.env["LOVABLE_API_KEY"];
+  const useFastGateway = !hasImage && Boolean(lovableKey);
+  let model = hasImage
+    ? BLUESMIND_VISION_MODEL
+    : useFastGateway
+      ? LOVABLE_AI_FALLBACK_MODEL
+      : BLUESMIND_CHAT_MODEL;
   const send = async (timeoutMs: number) =>
-    fetch(BLUESMIND_URL, {
+    fetch(useFastGateway ? LOVABLE_AI_URL : BLUESMIND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers: useFastGateway
+        ? { "Content-Type": "application/json", "Lovable-API-Key": lovableKey ?? "" }
+        : { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
-        max_completion_tokens: maxTokens,
+        ...(useFastGateway
+          ? { max_tokens: maxTokens }
+          : { max_completion_tokens: maxTokens }),
         messages,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
 
   const sendFallback = async () => {
-    const fallbackKey = process.env["LOVABLE_API_KEY"];
-    if (!fallbackKey) return null;
+    if (!lovableKey || useFastGateway) return null;
     model = LOVABLE_AI_FALLBACK_MODEL;
     return fetch(LOVABLE_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Lovable-API-Key": fallbackKey,
+        "Lovable-API-Key": lovableKey,
       },
       body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
     });
