@@ -10,8 +10,9 @@
     <header>
       <div class="brand">
         <img class="brand-mark" src="jenvu-logo.png" alt="Jenvu logo" width="36" height="36" />
-        <div>
+        <div class="brand-text">
           <h1>Jenvu</h1>
+          <img class="verified-tick" src="jenvu-verified-2026.png" alt="Verified" width="20" height="20" />
         </div>
       </div>
       <div class="head-right">
@@ -41,9 +42,12 @@
           <div class="row" id="tfs" aria-label="Chart timeframe"></div>
         </div>
         <div class="chartbox">
-          <svg id="chart" class="chart" viewBox="0 0 300 96" preserveAspectRatio="none" aria-label="Gold price chart"></svg>
+          <canvas id="chart" class="chart" width="600" height="192" role="img" aria-label="Gold price chart"></canvas>
         </div>
       </section>
+
+
+
 
       <div id="screenbar" class="screenbar">
         <button id="share" class="share">

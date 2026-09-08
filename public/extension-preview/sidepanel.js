@@ -28,6 +28,7 @@ let history = [];
 /* ---------- chat threads (new chat + history) ---------- */
 
 const STORE_KEY = "jenvu_threads_v1";
+const SNAPSHOT_KEY = "jenvu_market_snapshot_v1";
 
 const store = {
   get() {
@@ -189,14 +190,28 @@ function updateQuickVisibility() {
   $("quick").classList.toggle("hidden", hasMessages || hasContext);
 }
 
+function scrollThread(force = false) {
+  // The real scrolling element is the .content wrapper, not #thread.
+  const t = document.querySelector(".content") || $("thread");
+  if (!t) return;
+  // ChatGPT-style: auto-scroll to latest, but don't yank the user down if
+  // they scrolled up to read older messages (unless it's their own message).
+  const nearBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 160;
+  if (!force && !nearBottom) return;
+  const go = () => { t.scrollTop = t.scrollHeight; };
+  requestAnimationFrame(() => { go(); setTimeout(go, 60); setTimeout(go, 250); });
+}
+
 function addMsg(cls, text, shot) {
   const t = $("thread");
+  const ownMessage = cls === "user";
   const d = document.createElement("div");
   d.className = "msg " + cls;
   if (shot) {
     const img = document.createElement("img");
     img.src = shot;
     img.className = "shot";
+    img.addEventListener("load", () => scrollThread(true));
     d.appendChild(img);
   }
   const body = document.createElement("div");
@@ -258,7 +273,7 @@ function addMsg(cls, text, shot) {
   }
   t.appendChild(d);
   updateQuickVisibility();
-  t.scrollTop = t.scrollHeight;
+  scrollThread(ownMessage);
   return d;
 }
 
@@ -293,77 +308,249 @@ async function post(body) {
 
 /* ---------- price chart ---------- */
 
-function drawChart(points) {
-  const svg = $("chart");
-  if (!svg) return;
-  if (!points || points.length < 2) {
-    svg.innerHTML = "";
+let lastMarks = [];
+let lastBias = null;
+
+function drawChart(points, marks, bias) {
+  if (Array.isArray(marks)) lastMarks = marks;
+  if (bias !== undefined) lastBias = bias;
+  const canvas = $("chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const cleanPoints = Array.isArray(points)
+    ? points.filter((point) => Number.isFinite(Number(point?.c)))
+    : [];
+  const rect = canvas.getBoundingClientRect();
+  const cssWidth = Math.max(260, Math.round(rect.width || 300));
+  const cssHeight = 132;
+  const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const pixelWidth = Math.round(cssWidth * scale);
+  const pixelHeight = Math.round(cssHeight * scale);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  if (cleanPoints.length < 2) {
+    ctx.fillStyle = "#5f6368";
+    ctx.font = '11px "Google Sans", system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText("Loading chart…", cssWidth / 2, cssHeight / 2);
     return;
   }
-  const W = 300;
-  const H = 96;
-  const pad = 6;
-  const vals = points.map((p) => p.c);
+  const labelGutter = 52;
+  const W = cssWidth;
+  const H = cssHeight;
+  const plotW = Math.max(120, W - labelGutter);
+  const pad = 10;
+  const vals = cleanPoints.map((p) => Number(p.c));
+  const marksList = Array.isArray(lastMarks) ? lastMarks : [];
+  const markLevels = [];
+  for (const m of marksList) {
+    if (m.kind === "zone") markLevels.push(Number(m.from), Number(m.to));
+    else markLevels.push(Number(m.level));
+  }
   let min = Math.min(...vals);
   let max = Math.max(...vals);
+  const priceSpan = max - min || 1;
+  for (const level of markLevels) {
+    // only stretch the scale for markings that sit close to the visible range
+    if (!Number.isFinite(level)) continue;
+    if (level > max && level - max < priceSpan * 0.6) max = level;
+    if (level < min && min - level < priceSpan * 0.6) min = level;
+  }
   if (max === min) {
     max += 1;
     min -= 1;
   }
   const span = max - min;
-  const x = (i) => (i / (points.length - 1)) * W;
+  const x = (i) => (i / (cleanPoints.length - 1)) * plotW;
   const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
+  const inView = (v) => Number.isFinite(v) && v >= min && v <= max;
+  const xForBarsAgo = (barsAgo) => {
+    const idx = cleanPoints.length - 1 - Math.max(0, Number(barsAgo) || 0);
+    return x(Math.max(0, Math.min(cleanPoints.length - 1, idx)));
+  };
 
-  let line = "";
-  points.forEach((p, i) => {
-    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(p.c).toFixed(2)} `;
-  });
-  const area = `${line}L${W} ${H} L0 ${H} Z`;
   const up = vals[vals.length - 1] >= vals[0];
   const stroke = up ? "#c9a227" : "#c0553f";
-  const lastX = W;
   const lastY = y(vals[vals.length - 1]);
+  const BUY = "#1a8754";
+  const SELL = "#c0553f";
+  const NEUTRAL = "#8a8f98";
+  const toneColor = (tone) => (tone === "buy" ? BUY : tone === "sell" ? SELL : NEUTRAL);
 
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="chfill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${stroke}" stop-opacity="0.28" />
-        <stop offset="100%" stop-color="${stroke}" stop-opacity="0" />
-      </linearGradient>
-    </defs>
-    <line class="chart-grid" x1="0" y1="${(H / 2).toFixed(1)}" x2="${W}" y2="${(H / 2).toFixed(1)}" />
-    <path d="${area}" fill="url(#chfill)" />
-    <path d="${line.trim()}" fill="none" stroke="${stroke}" stroke-width="1.6"
-      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-    <circle cx="${(lastX - 1.5).toFixed(2)}" cy="${lastY.toFixed(2)}" r="2.6" fill="${stroke}" />
-  `;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.07)";
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2);
+  ctx.lineTo(plotW, H / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ---- AI markings: zones behind the price line ----
+  ctx.font = '9px "Google Sans", system-ui, sans-serif';
+  for (const m of marksList) {
+    if (m.kind !== "zone") continue;
+    const top = y(Math.max(Number(m.from), Number(m.to)));
+    const bottom = y(Math.min(Number(m.from), Number(m.to)));
+    if (!Number.isFinite(top) || !Number.isFinite(bottom)) continue;
+    const h = Math.max(3, bottom - top);
+    ctx.fillStyle = m.tone === "buy" ? "rgba(26, 135, 84, 0.14)" : "rgba(192, 85, 63, 0.14)";
+    ctx.fillRect(0, top, plotW, h);
+    ctx.fillStyle = toneColor(m.tone);
+    ctx.textAlign = "left";
+    ctx.fillText(m.label, 3, Math.min(H - 3, top + Math.max(9, h / 2 + 3)));
+  }
+
+  const trace = new Path2D();
+  cleanPoints.forEach((p, i) => {
+    const px = x(i);
+    const py = y(Number(p.c));
+    if (i === 0) trace.moveTo(px, py);
+    else trace.lineTo(px, py);
+  });
+  const area = new Path2D();
+  area.addPath(trace);
+  area.lineTo(plotW, H);
+  area.lineTo(0, H);
+  area.closePath();
+  const fill = ctx.createLinearGradient(0, 0, 0, H);
+  fill.addColorStop(0, up ? "rgba(201, 162, 39, 0.28)" : "rgba(192, 85, 63, 0.28)");
+  fill.addColorStop(1, up ? "rgba(201, 162, 39, 0)" : "rgba(192, 85, 63, 0)");
+  ctx.fillStyle = fill;
+  ctx.fill(area);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke(trace);
+  ctx.fillStyle = stroke;
+  ctx.beginPath();
+  ctx.arc(plotW - 2.6, lastY, 2.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- AI markings: liquidity lines, BOS / CHoCH, sweeps ----
+  const usedRows = [];
+  const placeLabel = (py) => {
+    let row = py;
+    while (usedRows.some((r) => Math.abs(r - row) < 10)) row += 10;
+    if (row > H - 3) row = py;
+    usedRows.push(row);
+    return row;
+  };
+
+  for (const m of marksList) {
+    if (m.kind === "line") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      ctx.strokeStyle = toneColor(m.tone);
+      ctx.globalAlpha = 0.55;
+      ctx.setLineDash(m.label === "EQ" ? [2, 4] : [5, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(plotW, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = toneColor(m.tone);
+      ctx.textAlign = "left";
+      ctx.fillText(m.label, plotW + 4, placeLabel(py + 3));
+    }
+    if (m.kind === "event") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      const px = xForBarsAgo(m.barsAgo);
+      const color = m.dir === "up" ? BUY : SELL;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(plotW, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillText(`${m.label}${m.dir === "up" ? "↑" : "↓"}`, plotW + 4, placeLabel(py + 3));
+    }
+    if (m.kind === "sweep") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      const px = xForBarsAgo(m.barsAgo);
+      ctx.fillStyle = toneColor(m.tone);
+      ctx.beginPath();
+      ctx.moveTo(px, py - 4);
+      ctx.lineTo(px + 3.5, py + 3);
+      ctx.lineTo(px - 3.5, py + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillText("SWEEP", plotW + 4, placeLabel(py + 3));
+    }
+  }
+
+  // ---- direction badge ----
+  if (lastBias && /bull|bear/i.test(String(lastBias))) {
+    const bull = /bull/i.test(String(lastBias));
+    ctx.fillStyle = bull ? BUY : SELL;
+    ctx.font = '10px "Google Sans", system-ui, sans-serif';
+    ctx.textAlign = "right";
+    ctx.fillText(bull ? "AI ▲ BULLISH" : "AI ▼ BEARISH", plotW - 6, 12);
+  }
 }
 
+
 let lastPrice = null;
+
+function renderSnapshot(d) {
+  const price = Number(d?.ticker?.price);
+  const changePercent = Number(d?.ticker?.changePercent);
+  if (!Number.isFinite(price) || !Array.isArray(d?.chart) || d.chart.length < 2) {
+    throw new Error("Invalid live graph data");
+  }
+  const el = $("price");
+  el.textContent = price.toFixed(2);
+  if (lastPrice !== null && price !== lastPrice) {
+    el.classList.remove("tick-up", "tick-down");
+    void el.offsetWidth;
+    el.classList.add(price > lastPrice ? "tick-up" : "tick-down");
+  }
+  lastPrice = price;
+  const safeChange = Number.isFinite(changePercent) ? changePercent : 0;
+  const up = safeChange >= 0;
+  const ch = $("change");
+  ch.textContent = `${up ? "▲" : "▼"} ${safeChange.toFixed(2)}%`;
+  ch.className = "hchange " + (up ? "bull" : "bear");
+  const trend = $("trend");
+  const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
+  trend.textContent = bias.toUpperCase();
+  trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
+  drawChart(d.chart, Array.isArray(d.marks) ? d.marks : [], d.marksBias ?? null);
+}
 
 async function loadSnapshot() {
   try {
     const d = await post({ action: "snapshot", timeframe });
-    const p = d.ticker.price;
-    const el = $("price");
-    el.textContent = p.toFixed(2);
-    if (lastPrice !== null && p !== lastPrice) {
-      el.classList.remove("tick-up", "tick-down");
-      void el.offsetWidth;
-      el.classList.add(p > lastPrice ? "tick-up" : "tick-down");
-    }
-    lastPrice = p;
-    const up = d.ticker.changePercent >= 0;
-    const ch = $("change");
-    ch.textContent = `${up ? "▲" : "▼"} ${d.ticker.changePercent.toFixed(2)}%`;
-    ch.className = "hchange " + (up ? "bull" : "bear");
-    const trend = $("trend");
-    const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
-    trend.textContent = bias.toUpperCase();
-    trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
-    drawChart(d.chart);
+    renderSnapshot(d);
+    try { chrome.storage?.local?.set({ [SNAPSHOT_KEY]: { ...d, timeframe } }); } catch { /* cache is optional */ }
   } catch (e) {
     console.warn("market pulse failed", e);
+    const trend = $("trend");
+    if (lastPrice === null) {
+      drawChart([]);
+      trend.textContent = "RECONNECTING";
+      trend.className = "trend";
+    }
   }
 }
 
@@ -568,6 +755,14 @@ async function send(preset, silentUser) {
 renderTabs();
 renderQuick();
 emptyState();
+try {
+  chrome.storage?.local?.get(SNAPSHOT_KEY, (saved) => {
+    const snapshot = saved?.[SNAPSHOT_KEY];
+    if (snapshot?.timeframe === timeframe) {
+      try { renderSnapshot(snapshot); } catch { /* wait for live data */ }
+    }
+  });
+} catch { /* extension storage is unavailable in web preview */ }
 loadSnapshot();
 setInterval(loadSnapshot, 5000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSnapshot(); });

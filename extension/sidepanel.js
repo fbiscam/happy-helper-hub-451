@@ -536,31 +536,6 @@ function renderSnapshot(d) {
   trend.textContent = bias.toUpperCase();
   trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
   drawChart(d.chart, Array.isArray(d.marks) ? d.marks : [], d.marksBias ?? null);
-  renderPrediction(d.nextCandle);
-}
-
-function renderPrediction(p) {
-  const card = document.getElementById("predict");
-  if (!card) return;
-  if (!p || !p.direction) {
-    card.classList.add("hidden");
-    return;
-  }
-  card.classList.remove("hidden");
-  const green = p.direction === "green";
-  card.className = "predict " + (green ? "up" : "down");
-  document.getElementById("pdir").textContent = green ? "GREEN" : "RED";
-  document.getElementById("pprob").textContent = `${Math.round(p.probability)}%`;
-  document.getElementById("pmeta").textContent =
-    `${p.confidence} confidence · ${green ? p.bullishFactors : p.bearishFactors}/${p.totalFactors} factors agree · model accuracy ${Math.round(p.hitRate)}%`;
-  document.getElementById("pdrivers").textContent = (p.topDrivers || [])
-    .slice(0, 3)
-    .map((d) => d.name)
-    .join(" · ");
-  document.getElementById("ptarget").textContent =
-    `Projected close ≈ $${p.projectedClose} (±$${p.expectedMove})`;
-  const bar = document.getElementById("pbar");
-  if (bar) bar.style.width = `${Math.max(0, Math.min(100, p.probability))}%`;
 }
 
 async function loadSnapshot() {
