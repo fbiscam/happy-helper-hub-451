@@ -400,8 +400,14 @@ export const Route = createFileRoute("/api/public/gold")({
         }
 
         const tradeIntent = TRADE_INTENT.test(body.question ?? "");
+        const wantsStructure =
+          STRUCTURE_INTENT.test(body.question ?? "") || CANDLE_INTENT.test(body.question ?? "");
         const needsMarketData =
-          body.action !== "chat" || tradeIntent || Boolean(body.screenImage || body.chartImage);
+          body.action !== "chat" ||
+          tradeIntent ||
+          wantsStructure ||
+          Boolean(body.screenImage || body.chartImage);
+
 
         let market: {
           ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
