@@ -42,6 +42,10 @@ DATA RULE: Every message gives you a live JSON block with real XAU/USD spot, EMA
 
 NEXT-CANDLE RULE: The JSON also carries a "nextCandle" object from the quantitative engine: direction (green/red), probability, confidence, score, hitRate (walk-forward accuracy of that engine on this timeframe), sampleSize, expectedMove, projectedClose/High/Low, bullishFactors/bearishFactors out of totalFactors, and topDrivers. When the user asks whether the next candle will be red or green, answer with that exact direction and probability — never contradict it, never invent your own number. Keep it to 2-4 short sentences: the call, the probability and confidence, two or three drivers, and the invalidation level. Always state plainly that this is a probability from a 25-factor model, not a certainty.
 
+STRUCTURE RULE (BOS / CHoCH / IDM / liquidity questions): smc.structure is computed on the live candles by a close-confirmed structure engine. It gives: bias, lastEvent ({type BOS|CHoCH, direction, level, barsAgo}), recentEvents (last five confirmed breaks in order), lastBos, lastChoch, protectedHigh/protectedLow (break it and structure flips), inducement ({level, type, taken} = the IDM liquidity price usually sweeps before continuing), nextBullishBreakLevel / nextBearishBreakLevel with distanceToBullishBreak / distanceToBearishBreak, and lastSwingHigh/Low. smc.priceAction gives the last candle OHLC, body % of range, size vs ATR, detected patterns (engulfing, rejection wick, inside bar, marubozu) and 3-candle momentum.
+When the user asks "did BOS happen?", "CHoCH?", "IDM?", "liquidity?", "price action?" — answer ONLY from these fields, in 2-5 short sentences, with the exact level and how many candles ago. If lastEvent is null or the break they mean has not printed, say clearly that no confirmed break has closed yet and give the exact level that must close through for BOS (nextBullishBreakLevel) or for CHoCH the protected level. Never say you cannot see the chart, never guess, and do not turn a structure question into a trade plan unless they ask for one.
+
+
 TOP-DOWN RULE (only when the user asks for a signal, trade idea, entry or market read — never for greetings or educational/conceptual questions): Read higherTimeframes first and state the higher-frame bias before anything else. No setup is A+ unless higherTimeframes.alignment agrees with your direction. If the verdict is "conflicted" or "leaning ... not aligned", the best grade you may give is B, and if the entry-frame bias fights the higher frames you must say stand aside.
 
 ACCURACY PROTOCOL (run this silently before every trading answer):
@@ -238,6 +242,10 @@ const TRADE_INTENT =
 const CANDLE_INTENT =
   /(next candle|agli candle|agli candel|candle (prediction|call|red|green)|red (ya|or) green|green (ya|or) red|candle banegi|candle bane)/i;
 
+const STRUCTURE_INTENT =
+  /\b(bos|choch|ch\.?o\.?ch|chch|idm|inducement|break of structure|change of character|market structure|structure (break|shift|kya|hua)|liquidity|liq sweep|sweep|swing (high|low)|price action|order block|\bob\b|fvg|imbalance|premium|discount|equilibrium|mitigation|breaker)\b/i;
+
+
 type SignalDirection = "buy" | "sell" | "stand-aside";
 type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
 
@@ -392,8 +400,14 @@ export const Route = createFileRoute("/api/public/gold")({
         }
 
         const tradeIntent = TRADE_INTENT.test(body.question ?? "");
+        const wantsStructure =
+          STRUCTURE_INTENT.test(body.question ?? "") || CANDLE_INTENT.test(body.question ?? "");
         const needsMarketData =
-          body.action !== "chat" || tradeIntent || Boolean(body.screenImage || body.chartImage);
+          body.action !== "chat" ||
+          tradeIntent ||
+          wantsStructure ||
+          Boolean(body.screenImage || body.chartImage);
+
 
         let market: {
           ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
@@ -464,6 +478,8 @@ export const Route = createFileRoute("/api/public/gold")({
 
          if (body.action === "chat") {
            const candleIntent = CANDLE_INTENT.test(body.question ?? "");
+           const structureIntent =
+             !candleIntent && STRUCTURE_INTENT.test(body.question ?? "");
            const chatContext =
              !tradeIntent && market
                ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
@@ -475,11 +491,13 @@ export const Route = createFileRoute("/api/public/gold")({
                  `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
                  (candleIntent
                    ? "The user is asking about the NEXT CANDLE. Answer using the nextCandle object exactly: state green or red, the probability, the confidence, two or three top drivers and the invalidation level. Keep it to 2-4 short sentences and do not produce a full trade plan or a stand-aside verdict.\n\n"
+                   : structureIntent
+                   ? "The user is asking about MARKET STRUCTURE / price action (BOS, CHoCH, IDM, liquidity, OB, FVG, premium-discount). Answer strictly from technicals.smc.structure, technicals.smc.priceAction, fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, recentSweeps and dealingRange — these are computed on the live candles, so you DO have the structure of the chart. Give the exact levels and how many candles ago each event closed. If no confirmed break has printed, say so and give the exact level that must close through for the next BOS or CHoCH. Keep it to 2-5 short sentences, no full trade plan and no stand-aside verdict unless asked.\n\n"
                    : tradeIntent
                    ? ""
                    : "This is a general/educational question — answer it briefly and directly. Do NOT give a trade plan, signal, stand-aside verdict or any market-direction call unless the user asked for one.\n\n") +
                  (body.screenImage || body.chartImage
-                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
+                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it, but when it comes to structure (BOS/CHoCH/IDM/liquidity) the engine data above is authoritative over what you think you see. Never say you cannot see the screen.\n\n"
                    : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
 
                  `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
@@ -500,22 +518,23 @@ export const Route = createFileRoute("/api/public/gold")({
                ...history,
                { role: "user", content: parts },
              ],
-              tradeIntent || shot ? 1300 : 420,
+              tradeIntent || shot ? 1300 : structureIntent ? 700 : 420,
              Boolean(shot),
            );
            if ("error" in result) return json(request, { error: result.error }, result.status);
            const reviewed =
-             market && !candleIntent && shouldReview(result.text, body.question, Boolean(shot))
+             market && !candleIntent && !structureIntent && shouldReview(result.text, body.question, Boolean(shot))
                ? await seniorReview(key, context, result.text, body.question)
                : result.text;
            const finalText = enforceEngineDirection(
              reviewed,
              engineDirection,
-             !candleIntent && TRADE_INTENT.test(body.question ?? ""),
+             !candleIntent && !structureIntent && TRADE_INTENT.test(body.question ?? ""),
              technicals,
            );
           return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
+
 
         const mode = body.mode ?? "technical";
         const userContent: unknown[] = [
