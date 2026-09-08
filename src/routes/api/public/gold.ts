@@ -181,7 +181,7 @@ async function callAi(
   try {
     // Keep the user-facing request fast: a failed provider call goes straight
     // to the fallback instead of making the user wait through a second call.
-    res = await send(hasImage ? 60_000 : 25_000);
+    res = await send(hasImage ? 60_000 : 45_000);
   } catch {
     const fallback = await sendFallback().catch(() => null);
     if (!fallback) {
@@ -490,7 +490,7 @@ async function seniorReview(
           `Junior analyst draft:\n${draft}`,
       },
     ],
-    1100,
+    1300,
     false,
   );
   if ("error" in review) return draft;
