@@ -235,6 +235,9 @@ Output ONLY the final corrected answer for the user. Do not mention the draft, t
 const TRADE_INTENT =
   /(trade|plan|entry|buy|sell|setup|signal|scalp|target|stop loss|stop-loss|analy|read (the |my )?(chart|screen|market)|what('| i)s the market|market (now|today|update)|current price|long|short)\b/i;
 
+const CANDLE_INTENT =
+  /(next candle|agli candle|agli candel|candle (prediction|call|red|green)|red (ya|or) green|green (ya|or) red|candle banegi|candle bane)/i;
+
 type SignalDirection = "buy" | "sell" | "stand-aside";
 type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
 
