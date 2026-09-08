@@ -460,54 +460,57 @@ export const Route = createFileRoute("/api/public/gold")({
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
          if (body.action === "chat") {
+           const candleIntent = CANDLE_INTENT.test(body.question ?? "");
            const chatContext =
              !tradeIntent && market
-               ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+               ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
                : context;
            const parts: unknown[] = [
              {
                type: "text",
                text:
                  `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
-                 (tradeIntent
+                 (candleIntent
+                   ? "The user is asking about the NEXT CANDLE. Answer using the nextCandle object exactly: state green or red, the probability, the confidence, two or three top drivers and the invalidation level. Keep it to 2-4 short sentences and do not produce a full trade plan or a stand-aside verdict.\n\n"
+                   : tradeIntent
                    ? ""
                    : "This is a general/educational question — answer it briefly and directly. Do NOT give a trade plan, signal, stand-aside verdict or any market-direction call unless the user asked for one.\n\n") +
-                (body.screenImage || body.chartImage
-                  ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
-                  : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
+                 (body.screenImage || body.chartImage
+                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
+                   : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
 
-                `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
-            },
-          ];
-          const shot = body.screenImage ?? body.chartImage;
-          if (shot) parts.push({ type: "image_url", image_url: { url: shot } });
+                 `User: ${body.question ?? "Read the screen and tell me what to do next."}`,
+             },
+           ];
+           const shot = body.screenImage ?? body.chartImage;
+           if (shot) parts.push({ type: "image_url", image_url: { url: shot } });
 
-          const history = (body.history ?? []).map((m) => ({
-            role: m.role,
-            content: m.text,
-          }));
+           const history = (body.history ?? []).map((m) => ({
+             role: m.role,
+             content: m.text,
+           }));
 
-           const result = await callAi(
-            key,
-            [
-              { role: "system", content: EXPERT_SYSTEM },
-              ...history,
-              { role: "user", content: parts },
-            ],
-             tradeIntent || shot ? 1300 : 320,
-            Boolean(shot),
-          );
-          if ("error" in result) return json(request, { error: result.error }, result.status);
-          const reviewed =
-            market && shouldReview(result.text, body.question, Boolean(shot))
-              ? await seniorReview(key, context, result.text, body.question)
-              : result.text;
-          const finalText = enforceEngineDirection(
-            reviewed,
-            engineDirection,
-            TRADE_INTENT.test(body.question ?? ""),
-            technicals,
-          );
+            const result = await callAi(
+             key,
+             [
+               { role: "system", content: EXPERT_SYSTEM },
+               ...history,
+               { role: "user", content: parts },
+             ],
+              tradeIntent || shot ? 1300 : 420,
+             Boolean(shot),
+           );
+           if ("error" in result) return json(request, { error: result.error }, result.status);
+           const reviewed =
+             market && !candleIntent && shouldReview(result.text, body.question, Boolean(shot))
+               ? await seniorReview(key, context, result.text, body.question)
+               : result.text;
+           const finalText = enforceEngineDirection(
+             reviewed,
+             engineDirection,
+             !candleIntent && TRADE_INTENT.test(body.question ?? ""),
+             technicals,
+           );
           return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
 
