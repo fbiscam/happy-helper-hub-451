@@ -197,6 +197,71 @@ Output ONLY the final corrected answer for the user. Do not mention the draft, t
 const TRADE_INTENT =
   /(trade|plan|entry|buy|sell|setup|analy|bias|target|stop|scalp|signal|signal|long|short|market|chart|screen|read|now|current|ict|smc|liquidity|fvg|order block)/i;
 
+type SignalDirection = "buy" | "sell" | "stand-aside";
+
+function getEngineDirection(
+  technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>,
+  higherTimeframes: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null,
+): SignalDirection {
+  const confluence = technicals.smc.confluence;
+  const lead = Math.abs(confluence.bullish - confluence.bearish);
+  const localDirection = confluence.netBias;
+  const alignment = higherTimeframes?.alignment;
+
+  // A directional call needs a clear local edge and a higher-timeframe
+  // majority in the same direction. Anything ambiguous fails closed.
+  if (lead < 2 || localDirection === "neutral" || !alignment || alignment.totalFrames < 2) {
+    return "stand-aside";
+  }
+  if (
+    localDirection === "bullish" &&
+    alignment.bullishFrames > alignment.bearishFrames
+  ) {
+    return "buy";
+  }
+  if (
+    localDirection === "bearish" &&
+    alignment.bearishFrames > alignment.bullishFrames
+  ) {
+    return "sell";
+  }
+  return "stand-aside";
+}
+
+function detectDraftDirection(text: string): Exclude<SignalDirection, "stand-aside"> | null {
+  const buy = /(?:\*\*)?(?:bias|signal|direction)(?:\*\*)?\s*:\s*(?:\*\*)?(?:buy|long|bullish)\b/i.test(text);
+  const sell = /(?:\*\*)?(?:bias|signal|direction)(?:\*\*)?\s*:\s*(?:\*\*)?(?:sell|short|bearish)\b/i.test(text);
+  if (buy === sell) return null;
+  return buy ? "buy" : "sell";
+}
+
+function enforceEngineDirection(
+  text: string,
+  direction: SignalDirection,
+  isTradeRequest: boolean,
+): string {
+  if (!isTradeRequest) return text;
+  const draftDirection = detectDraftDirection(text);
+  if (direction !== "stand-aside" && (!draftDirection || draftDirection === direction)) {
+    return text;
+  }
+  if (direction === "stand-aside" && !draftDirection) return text;
+
+  return `The ICT/SMC engine does not confirm a safe directional setup right now, so the correct decision is to stand aside rather than force a trade.
+
+## Trade Plan
+
+1. **Bias:** Stand aside; local and higher-timeframe evidence is not sufficiently aligned.
+2. **Entry:** No entry is valid until market structure, dealing-range location and higher-timeframe direction agree.
+3. **Stop Loss:** Not applicable because there is no confirmed entry.
+4. **Target 1 / Target 2:** Not applicable until a valid setup forms.
+5. **Risk-Reward:** No trade; capital preservation takes priority.
+6. **Setup Grade:** **C — low confidence**.
+7. **Invalidation:** Reassess only after fresh structure and liquidity confirmation.
+
+Risk note: skipping a conflicting signal is safer than taking the wrong side.`;
+}
+
 function shouldReview(
   draft: string,
   question: string | undefined,
@@ -300,8 +365,18 @@ export const Route = createFileRoute("/api/public/gold")({
         const key = process.env["BLUESMIND_API_KEY"];
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
 
+        const engineDirection =
+          technicals && body.action !== "snapshot"
+            ? getEngineDirection(technicals, htf)
+            : "stand-aside";
         const context = market
-          ? JSON.stringify({ ticker, technicals, higherTimeframes: htf, timeframe: body.timeframe })
+          ? JSON.stringify({
+              ticker,
+              technicals,
+              higherTimeframes: htf,
+              timeframe: body.timeframe,
+              authoritativeSignalDirection: engineDirection,
+            })
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
         if (body.action === "chat") {
@@ -340,7 +415,12 @@ export const Route = createFileRoute("/api/public/gold")({
             market && shouldReview(result.text, body.question, Boolean(shot))
               ? await seniorReview(key, context, result.text, body.question)
               : result.text;
-          return json(request, { text: reviewed, ticker, technicals, model: result.model });
+          const finalText = enforceEngineDirection(
+            reviewed,
+            engineDirection,
+            TRADE_INTENT.test(body.question ?? ""),
+          );
+          return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
 
         const mode = body.mode ?? "technical";
@@ -372,7 +452,8 @@ export const Route = createFileRoute("/api/public/gold")({
           shouldReview(result.text, body.question, Boolean(body.chartImage))
             ? await seniorReview(key, context, result.text, body.question)
             : result.text;
-        return json(request, { text: finalText, ticker, technicals, model: result.model });
+        const guardedText = enforceEngineDirection(finalText, engineDirection, true);
+        return json(request, { text: guardedText, ticker, technicals, model: result.model });
       },
     },
   },
