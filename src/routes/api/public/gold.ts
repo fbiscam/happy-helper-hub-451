@@ -442,6 +442,25 @@ function shouldReview(
   return true;
 }
 
+function formatNextCandleAnswer(
+  prediction: Awaited<ReturnType<typeof import("@/lib/predict.server")["predictNextCandle"]>>,
+  technicals: Technicals | null,
+): string | null {
+  if (!prediction) return null;
+
+  const direction = prediction.direction === "green" ? "GREEN" : "RED";
+  const drivers = prediction.topDrivers
+    .slice(0, 3)
+    .map((driver) => driver.name)
+    .join(", ");
+  const invalidation =
+    prediction.direction === "green"
+      ? technicals?.smc.structure.protectedLow ?? prediction.projectedLow
+      : technicals?.smc.structure.protectedHigh ?? prediction.projectedHigh;
+
+  return `The next ${direction} candle is more likely, with **${prediction.probability}% probability** and **${prediction.confidence} confidence**. The main drivers are ${drivers || "the model's combined momentum and structure factors"}. This view weakens if price breaks **${Number(invalidation).toFixed(2)}**; it is a probability from the 25-factor model, not a certainty.`;
+}
+
 async function seniorReview(
   key: string,
   context: string,
@@ -553,9 +572,6 @@ export const Route = createFileRoute("/api/public/gold")({
         }
 
 
-        const key = process.env["BLUESMIND_API_KEY"];
-        if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
-
         const engineDirection = technicals
           ? getEngineDirection(technicals, htf)
           : "stand-aside";
@@ -574,6 +590,24 @@ export const Route = createFileRoute("/api/public/gold")({
            const candleIntent = CANDLE_INTENT.test(body.question ?? "");
            const structureIntent =
              !candleIntent && STRUCTURE_INTENT.test(body.question ?? "");
+
+           // A next-candle call already comes from the deterministic 25-factor
+           // engine. Return it directly so an external model timeout or token
+           // cutoff can never leave this short, time-sensitive answer partial.
+           if (candleIntent) {
+             const candleAnswer = formatNextCandleAnswer(nextCandle, technicals);
+             if (candleAnswer) {
+               return json(request, {
+                 text: candleAnswer,
+                 ticker,
+                 technicals,
+                 model: "jenvu-25-factor-engine",
+               });
+             }
+           }
+
+           const key = process.env["BLUESMIND_API_KEY"];
+           if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
            const chatContext =
              !tradeIntent && market
                ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
@@ -630,6 +664,8 @@ export const Route = createFileRoute("/api/public/gold")({
         }
 
 
+        const key = process.env["BLUESMIND_API_KEY"];
+        if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
         const mode = body.mode ?? "technical";
         const userContent: unknown[] = [
           {
