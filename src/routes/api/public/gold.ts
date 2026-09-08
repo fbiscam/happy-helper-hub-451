@@ -140,7 +140,7 @@ async function callAi(
   let model = hasImage
     ? BLUESMIND_VISION_MODEL
     : useFastGateway
-      ? LOVABLE_AI_FALLBACK_MODEL
+      ? LOVABLE_AI_MODEL
       : BLUESMIND_CHAT_MODEL;
   const send = async (timeoutMs: number) =>
     fetch(useFastGateway ? LOVABLE_AI_URL : BLUESMIND_URL, {
@@ -150,9 +150,10 @@ async function callAi(
         : { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
-        ...(useFastGateway
-          ? { max_tokens: maxTokens }
-          : { max_completion_tokens: maxTokens }),
+        max_completion_tokens: maxTokens,
+        // gpt-6-astra requires an explicit reasoning effort; "low" keeps
+        // answers fast while keeping the deeper model quality.
+        ...(useFastGateway ? { reasoning_effort: "low" } : {}),
         messages,
       }),
       signal: AbortSignal.timeout(timeoutMs),
