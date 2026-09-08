@@ -43,12 +43,14 @@ header {
   position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
 .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.brand-mark { width: 36px; height: 36px; flex: none; object-fit: contain; }
-h1 { font-size: 19px; font-weight: 500; margin: 0; letter-spacing: 0; }
+.brand-mark { width: 36px; height: 36px; flex: none; object-fit: contain; margin-left: -3px; }
+.brand-text { display: flex; align-items: center; gap: 5px; }
+h1 { font-size: 21px; font-weight: 500; margin: 0; letter-spacing: 0; }
+.verified-tick { width: 18px; height: 18px; flex: none; object-fit: contain; }
 .sub { margin: 2px 0 0; font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
 .head-right { display: flex; align-items: center; gap: 5px; }
 
-.content { flex: 1; overflow-y: auto; padding: 24px 18px 12px; scrollbar-width: thin; scrollbar-color: #dadce0 transparent; }
+.content { flex: 1; overflow-y: auto; padding: 24px 18px 12px; scrollbar-width: thin; scrollbar-color: #dadce0 transparent; scroll-behavior: smooth; }
 .market { padding: 16px; border-radius: 16px; border: 1px solid #edf0f2; background: var(--bg); }
 .market-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .trend { border-radius: 999px; padding: 4px 8px; background: var(--surface-strong); color: var(--muted); font-size: 10px; font-weight: 500; }
@@ -204,10 +206,5 @@ button.hbtn:hover{color:var(--blue);background:var(--blue-soft);border-color:#c6
 .chart {
   display: block;
   width: 100%;
-  height: 96px;
-}
-.chart-grid {
-  stroke: rgba(0, 0, 0, 0.07);
-  stroke-dasharray: 3 4;
-  stroke-width: 1;
+  height: 132px;
 }
