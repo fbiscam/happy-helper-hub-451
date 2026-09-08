@@ -393,27 +393,28 @@ function getEngineDirection(
   const localDirection = confluence.netBias;
   const alignment = higherTimeframes?.alignment;
 
-  // A directional call needs a clear local edge and a higher-timeframe
-  // majority in the same direction. Anything ambiguous fails closed.
-  if (lead < 2 || localDirection === "neutral" || !alignment || alignment.totalFrames < 2) {
+  // A directional call needs a clear local edge. Higher frames may be mixed,
+  // but they must not have a majority against the local direction. Daily has
+  // no higher frame in this feed, so its own clear edge remains authoritative.
+  if (lead < 2 || localDirection === "neutral") {
     return "stand-aside";
   }
-  let direction: SignalDirection = "stand-aside";
+  if (!alignment || alignment.totalFrames === 0) {
+    return localDirection === "bullish" ? "buy" : "sell";
+  }
   if (
     localDirection === "bullish" &&
-    alignment.bullishFrames > alignment.bearishFrames
+    alignment.bullishFrames >= alignment.bearishFrames
   ) {
-    direction = "buy";
+    return "buy";
   }
   if (
     localDirection === "bearish" &&
-    alignment.bearishFrames > alignment.bullishFrames
+    alignment.bearishFrames >= alignment.bullishFrames
   ) {
-    direction = "sell";
+    return "sell";
   }
-  // A signal without a directionally correct OB/FVG in the correct half of
-  // the dealing range has no defensible entry and must not be published.
-  return getValidEntryZones(technicals, direction).length > 0 ? direction : "stand-aside";
+  return "stand-aside";
 }
 
 function detectDraftDirection(text: string): Exclude<SignalDirection, "stand-aside"> | null {
@@ -431,11 +432,20 @@ function enforceEngineDirection(
 ): string {
   if (!isTradeRequest) return text;
   const draftDirection = detectDraftDirection(text);
+  if (direction !== "stand-aside" && !draftDirection) {
+    const label = direction.toUpperCase();
+    return `**Directional signal: ${label}. Execution status: WAIT for a valid ${direction} entry.**\n\n${text}`;
+  }
   if (direction !== "stand-aside" && draftDirection === direction && technicals) {
+    const validZones = getValidEntryZones(technicals, direction);
+    // Direction and entry readiness are separate decisions. If no qualifying
+    // PD array exists yet, preserve a correctly directional wait-for-entry
+    // answer rather than incorrectly erasing the signal itself.
+    if (!validZones.length) return text;
     const entryLine = text.match(/(?:\*\*)?Entry(?:\*\*)?\s*:\s*([^\n]+)/i)?.[1] ?? "";
     const quotedEntries = [...entryLine.matchAll(/\b\d{3,5}(?:\.\d+)?\b/g)].map((match) => Number(match[0]));
     const tolerance = technicals.atr14 * 0.15;
-    const validEntry = getValidEntryZones(technicals, direction).some((zone) =>
+    const validEntry = validZones.some((zone) =>
       quotedEntries.some((entry) => entry >= zone.from - tolerance && entry <= zone.to + tolerance),
     );
     if (validEntry) return text;
@@ -569,7 +579,13 @@ export const Route = createFileRoute("/api/public/gold")({
             nextCandle: predictNextCandle(candles),
           };
           if (body.action !== "snapshot") {
-            const higher = ["1h", "4h", "1d"].filter((tf) => tf !== body.timeframe);
+            const higherByTimeframe: Record<z.infer<typeof TF>, string[]> = {
+              "15m": ["1h", "4h", "1d"],
+              "1h": ["4h", "1d"],
+              "4h": ["1d"],
+              "1d": [],
+            };
+            const higher = higherByTimeframe[body.timeframe];
             htf = await fetchHtfSummaries(offset ?? 0, higher);
           }
         } catch (error) {
@@ -641,11 +657,16 @@ export const Route = createFileRoute("/api/public/gold")({
              !tradeIntent && market
                ? JSON.stringify({ ticker, technicals, nextCandle, timeframe: body.timeframe })
                : context;
+            const signalInstruction =
+              tradeIntent && engineDirection !== "stand-aside"
+                ? `ENGINE DIRECTION IS ${engineDirection.toUpperCase()}. State this clearly as the directional signal. If price is not at a safe POI, label execution as WAIT and give the pending confirmation/entry condition; do not rename the directional signal to stand aside.\n\n`
+                : "";
            const parts: unknown[] = [
              {
                type: "text",
                text:
                  `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
+                  signalInstruction +
                  (candleIntent
                    ? "The user is asking about the NEXT CANDLE. Answer using the nextCandle object exactly: state green or red, the probability, the confidence, two or three top drivers and the invalidation level. Keep it to 2-4 short sentences and do not produce a full trade plan or a stand-aside verdict.\n\n"
                    : structureIntent
