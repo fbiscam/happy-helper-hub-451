@@ -276,23 +276,15 @@ function buildChartMarks(technicals: Technicals): ChartMark[] {
   const smc = technicals.smc;
   const marks: ChartMark[] = [];
 
-  for (const e of (smc.structure.recentEvents ?? []).slice(0, 3)) {
+  // Only the essentials: latest structure shift, key liquidity, nearest zone.
+  const lastEvent = (smc.structure.recentEvents ?? [])[0];
+  if (lastEvent) {
     marks.push({
       kind: "event",
-      label: e.type === "CHoCH" ? "CHoCH" : "BOS",
-      level: e.level,
-      barsAgo: e.barsAgo,
-      dir: e.direction === "bullish" ? "up" : "down",
-    });
-  }
-
-  for (const s of (smc.recentSweeps ?? []).slice(0, 2)) {
-    marks.push({
-      kind: "sweep",
-      label: s.type === "buy-side" ? "BSL sweep" : "SSL sweep",
-      level: s.level,
-      barsAgo: s.barsAgo,
-      tone: s.type === "buy-side" ? "sell" : "buy",
+      label: lastEvent.type === "CHoCH" ? "CHoCH" : "BOS",
+      level: lastEvent.level,
+      barsAgo: lastEvent.barsAgo,
+      dir: lastEvent.direction === "bullish" ? "up" : "down",
     });
   }
 
@@ -303,31 +295,18 @@ function buildChartMarks(technicals: Technicals): ChartMark[] {
     marks.push({ kind: "line", label: "SSL", level, tone: "buy" });
   }
 
-  if (smc.structure.inducement) {
-    marks.push({ kind: "line", label: "IDM", level: smc.structure.inducement.level, tone: "neutral" });
-  }
-  marks.push({ kind: "line", label: "EQ", level: smc.dealingRange.equilibrium, tone: "neutral" });
-
-  const zone = smc.orderBlocks[0] ?? null;
+  const zone = smc.orderBlocks[0] ?? smc.fairValueGaps[0] ?? null;
+  const zoneLabel = smc.orderBlocks[0] ? "OB" : "FVG";
   if (zone) {
     marks.push({
       kind: "zone",
-      label: "OB",
+      label: zoneLabel,
       from: zone.from,
       to: zone.to,
       tone: zone.type === "bullish" ? "buy" : "sell",
     });
   }
-  const gap = smc.fairValueGaps[0] ?? null;
-  if (gap) {
-    marks.push({
-      kind: "zone",
-      label: "FVG",
-      from: gap.from,
-      to: gap.to,
-      tone: gap.type === "bullish" ? "buy" : "sell",
-    });
-  }
+
 
   return marks;
 }
