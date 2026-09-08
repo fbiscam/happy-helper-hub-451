@@ -90,7 +90,8 @@ const BLUESMIND_URL = "https://api.bluesminds.com/v1/chat/completions";
 const BLUESMIND_CHAT_MODEL = "openai/gpt-oss-20b";
 const BLUESMIND_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct";
 const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const LOVABLE_AI_FALLBACK_MODEL = "google/gemini-3.8-flash";
+// Upgraded brain: OpenAI's most capable model for text analysis.
+const LOVABLE_AI_MODEL = "openai/gpt-6-astra";
 
 function isAllowedOrigin(origin: string) {
   if (origin.startsWith("chrome-extension://")) return true;
@@ -139,7 +140,7 @@ async function callAi(
   let model = hasImage
     ? BLUESMIND_VISION_MODEL
     : useFastGateway
-      ? LOVABLE_AI_FALLBACK_MODEL
+      ? LOVABLE_AI_MODEL
       : BLUESMIND_CHAT_MODEL;
   const send = async (timeoutMs: number) =>
     fetch(useFastGateway ? LOVABLE_AI_URL : BLUESMIND_URL, {
@@ -149,9 +150,10 @@ async function callAi(
         : { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
-        ...(useFastGateway
-          ? { max_tokens: maxTokens }
-          : { max_completion_tokens: maxTokens }),
+        max_completion_tokens: maxTokens,
+        // gpt-6-astra requires an explicit reasoning effort; "low" keeps
+        // answers fast while keeping the deeper model quality.
+        ...(useFastGateway ? { reasoning_effort: "low" } : {}),
         messages,
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -159,14 +161,19 @@ async function callAi(
 
   const sendFallback = async () => {
     if (!lovableKey || useFastGateway) return null;
-    model = LOVABLE_AI_FALLBACK_MODEL;
+    model = LOVABLE_AI_MODEL;
     return fetch(LOVABLE_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Lovable-API-Key": lovableKey,
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+      body: JSON.stringify({
+        model,
+        max_completion_tokens: maxTokens,
+        reasoning_effort: "low",
+        messages,
+      }),
     });
   };
 
@@ -174,7 +181,7 @@ async function callAi(
   try {
     // Keep the user-facing request fast: a failed provider call goes straight
     // to the fallback instead of making the user wait through a second call.
-    res = await send(hasImage ? 60_000 : 25_000);
+    res = await send(hasImage ? 60_000 : 45_000);
   } catch {
     const fallback = await sendFallback().catch(() => null);
     if (!fallback) {
@@ -483,7 +490,7 @@ async function seniorReview(
           `Junior analyst draft:\n${draft}`,
       },
     ],
-    1100,
+    1300,
     false,
   );
   if ("error" in review) return draft;
@@ -646,7 +653,7 @@ export const Route = createFileRoute("/api/public/gold")({
                ...history,
                { role: "user", content: parts },
              ],
-              tradeIntent || shot ? 1300 : structureIntent ? 700 : 420,
+              tradeIntent || shot ? 1600 : structureIntent ? 900 : 600,
              Boolean(shot),
            );
            if ("error" in result) return json(request, { error: result.error }, result.status);
@@ -686,7 +693,7 @@ export const Route = createFileRoute("/api/public/gold")({
             { role: "system", content: EXPERT_SYSTEM },
             { role: "user", content: userContent },
           ],
-          1200,
+          1600,
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
