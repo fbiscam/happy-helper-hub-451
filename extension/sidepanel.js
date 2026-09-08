@@ -190,8 +190,22 @@ function updateQuickVisibility() {
   $("quick").classList.toggle("hidden", hasMessages || hasContext);
 }
 
+function scrollThread(force = false) {
+  const t = $("thread");
+  if (!t) return;
+  // ChatGPT-style: auto-scroll to latest, but don't yank the user down if
+  // they scrolled up to read older messages (unless it's their own message).
+  const nearBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 120;
+  if (force || nearBottom) {
+    requestAnimationFrame(() => {
+      t.scrollTo({ top: t.scrollHeight, behavior: "smooth" });
+    });
+  }
+}
+
 function addMsg(cls, text, shot) {
   const t = $("thread");
+  const ownMessage = cls === "user";
   const d = document.createElement("div");
   d.className = "msg " + cls;
   if (shot) {
