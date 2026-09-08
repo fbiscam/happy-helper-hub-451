@@ -139,26 +139,164 @@ function swings(candles: Candle[], span = 3): Swing[] {
   return out;
 }
 
-/** Last structural event: break of structure or change of character. */
+/**
+ * Advanced market structure engine.
+ * Walks swing points chronologically and records every close-confirmed
+ * break of structure (BOS) and change of character (CHoCH), then derives the
+ * protected high/low and the current inducement (IDM) level.
+ */
 function structure(candles: Candle[], sw: Swing[]) {
-  const highs = sw.filter((s) => s.kind === "high").slice(-4);
-  const lows = sw.filter((s) => s.kind === "low").slice(-4);
   const price = candles[candles.length - 1]!.close;
+  const n = candles.length;
+  const ordered = [...sw].sort((a, b) => a.index - b.index);
+
+  type Ev = {
+    type: "BOS" | "CHoCH";
+    direction: "bullish" | "bearish";
+    level: number;
+    brokenAt: number;
+    barsAgo: number;
+  };
+  const events: Ev[] = [];
+  let trend: "bullish" | "bearish" | null = null;
+  let lastBreakIdx = 0;
+
+  for (const s of ordered) {
+    // first candle after the swing formed that CLOSES beyond it = confirmed break
+    let brokenAt = -1;
+    for (let i = s.index + 3; i < n; i++) {
+      const c = candles[i]!;
+      if (s.kind === "high" && c.close > s.price) { brokenAt = i; break; }
+      if (s.kind === "low" && c.close < s.price) { brokenAt = i; break; }
+    }
+    if (brokenAt < 0 || brokenAt <= lastBreakIdx) continue;
+    const direction = s.kind === "high" ? "bullish" : "bearish";
+    const type: "BOS" | "CHoCH" = trend && trend !== direction ? "CHoCH" : "BOS";
+    events.push({
+      type,
+      direction,
+      level: Number(s.price.toFixed(2)),
+      brokenAt,
+      barsAgo: n - 1 - brokenAt,
+    });
+    trend = direction;
+    lastBreakIdx = brokenAt;
+  }
+
+  const last = events[events.length - 1] ?? null;
+  const highs = ordered.filter((s) => s.kind === "high");
+  const lows = ordered.filter((s) => s.kind === "low");
   const lastHigh = highs[highs.length - 1];
   const lastLow = lows[lows.length - 1];
-  const higherHighs = highs.length >= 2 && highs[highs.length - 1]!.price > highs[highs.length - 2]!.price;
-  const higherLows = lows.length >= 2 && lows[lows.length - 1]!.price > lows[lows.length - 2]!.price;
-  const bias = higherHighs && higherLows ? "bullish" : !higherHighs && !higherLows ? "bearish" : "mixed";
-  let event = "none";
-  if (lastHigh && price > lastHigh.price) event = bias === "bearish" ? "bullish CHoCH" : "bullish BOS";
-  else if (lastLow && price < lastLow.price) event = bias === "bullish" ? "bearish CHoCH" : "bearish BOS";
+
+  // Protected swing: the low that produced the last bullish break (or the high
+  // that produced the last bearish break). Breaking it flips structure.
+  let protectedHigh: number | null = null;
+  let protectedLow: number | null = null;
+  if (last) {
+    const before = ordered.filter((s) => s.index < last.brokenAt);
+    if (last.direction === "bullish") {
+      const l = before.filter((s) => s.kind === "low").slice(-1)[0];
+      protectedLow = l ? Number(l.price.toFixed(2)) : null;
+    } else {
+      const h = before.filter((s) => s.kind === "high").slice(-1)[0];
+      protectedHigh = h ? Number(h.price.toFixed(2)) : null;
+    }
+  }
+
+  // Inducement (IDM): the nearest minor liquidity pocket formed AFTER the last
+  // break, which price usually sweeps before continuing with the trend.
+  let inducement: { level: number; type: "sell-side" | "buy-side"; taken: boolean } | null = null;
+  if (last) {
+    const after = ordered.filter((s) => s.index > last.brokenAt);
+    if (last.direction === "bullish") {
+      const l = after.filter((s) => s.kind === "low").sort((a, b) => b.price - a.price)[0];
+      if (l) {
+        const taken = candles.slice(l.index + 1).some((c) => c.low < l.price);
+        inducement = { level: Number(l.price.toFixed(2)), type: "sell-side", taken };
+      }
+    } else {
+      const h = after.filter((s) => s.kind === "high").sort((a, b) => a.price - b.price)[0];
+      if (h) {
+        const taken = candles.slice(h.index + 1).some((c) => c.high > h.price);
+        inducement = { level: Number(h.price.toFixed(2)), type: "buy-side", taken };
+      }
+    }
+  }
+
+  const recent = events.slice(-5).map((e) => ({
+    type: e.type,
+    direction: e.direction,
+    level: e.level,
+    barsAgo: e.barsAgo,
+  }));
+  const bias = trend ?? "mixed";
+
   return {
     bias,
-    event,
+    event: last ? `${last.direction} ${last.type}` : "none",
+    lastEvent: last
+      ? { type: last.type, direction: last.direction, level: last.level, barsAgo: last.barsAgo }
+      : null,
+    recentEvents: recent,
+    lastBos: [...events].reverse().find((e) => e.type === "BOS")
+      ? (() => {
+          const b = [...events].reverse().find((e) => e.type === "BOS")!;
+          return { direction: b.direction, level: b.level, barsAgo: b.barsAgo };
+        })()
+      : null,
+    lastChoch: (() => {
+      const c = [...events].reverse().find((e) => e.type === "CHoCH");
+      return c ? { direction: c.direction, level: c.level, barsAgo: c.barsAgo } : null;
+    })(),
+    protectedHigh,
+    protectedLow,
+    inducement,
+    nextBullishBreakLevel: lastHigh ? Number(lastHigh.price.toFixed(2)) : null,
+    nextBearishBreakLevel: lastLow ? Number(lastLow.price.toFixed(2)) : null,
+    distanceToBullishBreak: lastHigh ? Number((lastHigh.price - price).toFixed(2)) : null,
+    distanceToBearishBreak: lastLow ? Number((price - lastLow.price).toFixed(2)) : null,
     lastSwingHigh: lastHigh ? Number(lastHigh.price.toFixed(2)) : null,
     lastSwingLow: lastLow ? Number(lastLow.price.toFixed(2)) : null,
   };
 }
+
+/** Last-candle price action reading: engulfing, rejection wicks, inside bars. */
+function priceAction(candles: Candle[], atrValue: number) {
+  const n = candles.length;
+  const c = candles[n - 1]!;
+  const p = candles[n - 2]!;
+  const body = Math.abs(c.close - c.open);
+  const upper = c.high - Math.max(c.close, c.open);
+  const lower = Math.min(c.close, c.open) - c.low;
+  const rangeSize = c.high - c.low || 1;
+  const patterns: string[] = [];
+  if (c.close > c.open && c.close > p.high && c.open < p.low) patterns.push("bullish engulfing");
+  if (c.close < c.open && c.close < p.low && c.open > p.high) patterns.push("bearish engulfing");
+  if (lower > body * 2 && lower / rangeSize > 0.5) patterns.push("bullish rejection wick");
+  if (upper > body * 2 && upper / rangeSize > 0.5) patterns.push("bearish rejection wick");
+  if (c.high < p.high && c.low > p.low) patterns.push("inside bar (compression)");
+  if (body / rangeSize > 0.8) patterns.push(c.close > c.open ? "bullish marubozu" : "bearish marubozu");
+  const last3 = candles.slice(-3);
+  const momentum =
+    last3.every((x) => x.close > x.open) ? "three bullish closes"
+      : last3.every((x) => x.close < x.open) ? "three bearish closes"
+        : "mixed";
+  return {
+    lastCandle: {
+      open: Number(c.open.toFixed(2)),
+      high: Number(c.high.toFixed(2)),
+      low: Number(c.low.toFixed(2)),
+      close: Number(c.close.toFixed(2)),
+      bodyPctOfRange: Number(((body / rangeSize) * 100).toFixed(0)),
+      direction: c.close > c.open ? "bullish" : "bearish",
+      sizeVsAtr: Number((rangeSize / (atrValue || 1)).toFixed(2)),
+    },
+    patterns: patterns.length ? patterns : ["no clean pattern"],
+    momentum,
+  };
+}
+
 
 /** Unmitigated 3-candle fair value gaps (imbalances) nearest to price. */
 function fairValueGaps(candles: Candle[], price: number, take = 4) {
