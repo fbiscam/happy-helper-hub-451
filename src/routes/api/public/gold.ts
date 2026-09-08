@@ -125,15 +125,27 @@ async function callAi(
   hasImage: boolean,
 ) {
   const model = hasImage ? BLUESMIND_VISION_MODEL : BLUESMIND_CHAT_MODEL;
-  const res = await fetch(BLUESMIND_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      max_completion_tokens: maxTokens,
-      messages,
-    }),
-  });
+  const send = async (timeoutMs: number) =>
+    fetch(BLUESMIND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        max_completion_tokens: maxTokens,
+        messages,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+  let res: Response;
+  try {
+    res = await send(110_000);
+    if (res.status >= 500) res = await send(60_000);
+  } catch {
+    return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
+  }
+
+
   if (!res.ok) {
     const failure = (await res.json().catch(() => null)) as
       | { error?: { message?: string } | string; message?: string }
