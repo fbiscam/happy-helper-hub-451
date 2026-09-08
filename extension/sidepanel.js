@@ -308,7 +308,12 @@ async function post(body) {
 
 /* ---------- price chart ---------- */
 
-function drawChart(points) {
+let lastMarks = [];
+let lastBias = null;
+
+function drawChart(points, marks, bias) {
+  if (Array.isArray(marks)) lastMarks = marks;
+  if (bias !== undefined) lastBias = bias;
   const canvas = $("chart");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -318,7 +323,7 @@ function drawChart(points) {
     : [];
   const rect = canvas.getBoundingClientRect();
   const cssWidth = Math.max(260, Math.round(rect.width || 300));
-  const cssHeight = 96;
+  const cssHeight = 132;
   const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   const pixelWidth = Math.round(cssWidth * scale);
   const pixelHeight = Math.round(cssHeight * scale);
@@ -332,34 +337,73 @@ function drawChart(points) {
     ctx.fillStyle = "#5f6368";
     ctx.font = '11px "Google Sans", system-ui, sans-serif';
     ctx.textAlign = "center";
-    ctx.fillText("Loading chart…", cssWidth / 2, 52);
+    ctx.fillText("Loading chart…", cssWidth / 2, cssHeight / 2);
     return;
   }
+  const labelGutter = 52;
   const W = cssWidth;
   const H = cssHeight;
-  const pad = 6;
+  const plotW = Math.max(120, W - labelGutter);
+  const pad = 10;
   const vals = cleanPoints.map((p) => Number(p.c));
+  const marksList = Array.isArray(lastMarks) ? lastMarks : [];
+  const markLevels = [];
+  for (const m of marksList) {
+    if (m.kind === "zone") markLevels.push(Number(m.from), Number(m.to));
+    else markLevels.push(Number(m.level));
+  }
   let min = Math.min(...vals);
   let max = Math.max(...vals);
+  const priceSpan = max - min || 1;
+  for (const level of markLevels) {
+    // only stretch the scale for markings that sit close to the visible range
+    if (!Number.isFinite(level)) continue;
+    if (level > max && level - max < priceSpan * 0.6) max = level;
+    if (level < min && min - level < priceSpan * 0.6) min = level;
+  }
   if (max === min) {
     max += 1;
     min -= 1;
   }
   const span = max - min;
-  const x = (i) => (i / (cleanPoints.length - 1)) * W;
+  const x = (i) => (i / (cleanPoints.length - 1)) * plotW;
   const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
+  const inView = (v) => Number.isFinite(v) && v >= min && v <= max;
+  const xForBarsAgo = (barsAgo) => {
+    const idx = cleanPoints.length - 1 - Math.max(0, Number(barsAgo) || 0);
+    return x(Math.max(0, Math.min(cleanPoints.length - 1, idx)));
+  };
 
   const up = vals[vals.length - 1] >= vals[0];
   const stroke = up ? "#c9a227" : "#c0553f";
   const lastY = y(vals[vals.length - 1]);
+  const BUY = "#1a8754";
+  const SELL = "#c0553f";
+  const NEUTRAL = "#8a8f98";
+  const toneColor = (tone) => (tone === "buy" ? BUY : tone === "sell" ? SELL : NEUTRAL);
 
   ctx.strokeStyle = "rgba(0, 0, 0, 0.07)";
   ctx.setLineDash([3, 4]);
   ctx.beginPath();
   ctx.moveTo(0, H / 2);
-  ctx.lineTo(W, H / 2);
+  ctx.lineTo(plotW, H / 2);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // ---- AI markings: zones behind the price line ----
+  ctx.font = '9px "Google Sans", system-ui, sans-serif';
+  for (const m of marksList) {
+    if (m.kind !== "zone") continue;
+    const top = y(Math.max(Number(m.from), Number(m.to)));
+    const bottom = y(Math.min(Number(m.from), Number(m.to)));
+    if (!Number.isFinite(top) || !Number.isFinite(bottom)) continue;
+    const h = Math.max(3, bottom - top);
+    ctx.fillStyle = m.tone === "buy" ? "rgba(26, 135, 84, 0.14)" : "rgba(192, 85, 63, 0.14)";
+    ctx.fillRect(0, top, plotW, h);
+    ctx.fillStyle = toneColor(m.tone);
+    ctx.textAlign = "left";
+    ctx.fillText(m.label, 3, Math.min(H - 3, top + Math.max(9, h / 2 + 3)));
+  }
 
   const trace = new Path2D();
   cleanPoints.forEach((p, i) => {
@@ -370,7 +414,7 @@ function drawChart(points) {
   });
   const area = new Path2D();
   area.addPath(trace);
-  area.lineTo(W, H);
+  area.lineTo(plotW, H);
   area.lineTo(0, H);
   area.closePath();
   const fill = ctx.createLinearGradient(0, 0, 0, H);
@@ -385,9 +429,86 @@ function drawChart(points) {
   ctx.stroke(trace);
   ctx.fillStyle = stroke;
   ctx.beginPath();
-  ctx.arc(W - 2.6, lastY, 2.6, 0, Math.PI * 2);
+  ctx.arc(plotW - 2.6, lastY, 2.6, 0, Math.PI * 2);
   ctx.fill();
+
+  // ---- AI markings: liquidity lines, BOS / CHoCH, sweeps ----
+  const usedRows = [];
+  const placeLabel = (py) => {
+    let row = py;
+    while (usedRows.some((r) => Math.abs(r - row) < 10)) row += 10;
+    if (row > H - 3) row = py;
+    usedRows.push(row);
+    return row;
+  };
+
+  for (const m of marksList) {
+    if (m.kind === "line") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      ctx.strokeStyle = toneColor(m.tone);
+      ctx.globalAlpha = 0.55;
+      ctx.setLineDash(m.label === "EQ" ? [2, 4] : [5, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(plotW, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = toneColor(m.tone);
+      ctx.textAlign = "left";
+      ctx.fillText(m.label, plotW + 4, placeLabel(py + 3));
+    }
+    if (m.kind === "event") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      const px = xForBarsAgo(m.barsAgo);
+      const color = m.dir === "up" ? BUY : SELL;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(plotW, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillText(`${m.label}${m.dir === "up" ? "↑" : "↓"}`, plotW + 4, placeLabel(py + 3));
+    }
+    if (m.kind === "sweep") {
+      const level = Number(m.level);
+      if (!inView(level)) continue;
+      const py = y(level);
+      const px = xForBarsAgo(m.barsAgo);
+      ctx.fillStyle = toneColor(m.tone);
+      ctx.beginPath();
+      ctx.moveTo(px, py - 4);
+      ctx.lineTo(px + 3.5, py + 3);
+      ctx.lineTo(px - 3.5, py + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillText("SWEEP", plotW + 4, placeLabel(py + 3));
+    }
+  }
+
+  // ---- direction badge ----
+  if (lastBias && /bull|bear/i.test(String(lastBias))) {
+    const bull = /bull/i.test(String(lastBias));
+    ctx.fillStyle = bull ? BUY : SELL;
+    ctx.font = '10px "Google Sans", system-ui, sans-serif';
+    ctx.textAlign = "right";
+    ctx.fillText(bull ? "AI ▲ BULLISH" : "AI ▼ BEARISH", plotW - 6, 12);
+  }
 }
+
 
 let lastPrice = null;
 
