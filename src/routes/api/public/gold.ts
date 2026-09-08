@@ -242,6 +242,10 @@ const TRADE_INTENT =
 const CANDLE_INTENT =
   /(next candle|agli candle|agli candel|candle (prediction|call|red|green)|red (ya|or) green|green (ya|or) red|candle banegi|candle bane)/i;
 
+const STRUCTURE_INTENT =
+  /\b(bos|choch|ch\.?o\.?ch|chch|idm|inducement|break of structure|change of character|market structure|structure (break|shift|kya|hua)|liquidity|liq sweep|sweep|swing (high|low)|price action|order block|\bob\b|fvg|imbalance|premium|discount|equilibrium|mitigation|breaker)\b/i;
+
+
 type SignalDirection = "buy" | "sell" | "stand-aside";
 type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
 
