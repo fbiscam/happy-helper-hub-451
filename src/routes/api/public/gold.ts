@@ -265,6 +265,74 @@ function getValidEntryZones(technicals: Technicals, direction: SignalDirection) 
   });
 }
 
+type ChartMark =
+  | { kind: "event"; label: string; level: number; barsAgo: number; dir: "up" | "down" }
+  | { kind: "line"; label: string; level: number; tone: "buy" | "sell" | "neutral" }
+  | { kind: "zone"; label: string; from: number; to: number; tone: "buy" | "sell" }
+  | { kind: "sweep"; label: string; level: number; barsAgo: number; tone: "buy" | "sell" };
+
+/** AI markings the chart draws itself: BOS / CHoCH, liquidity, sweeps, OB & FVG zones. */
+function buildChartMarks(technicals: Technicals): ChartMark[] {
+  const smc = technicals.smc;
+  const marks: ChartMark[] = [];
+
+  for (const e of (smc.structure.recentEvents ?? []).slice(0, 3)) {
+    marks.push({
+      kind: "event",
+      label: e.type === "CHoCH" ? "CHoCH" : "BOS",
+      level: e.level,
+      barsAgo: e.barsAgo,
+      dir: e.direction === "bullish" ? "up" : "down",
+    });
+  }
+
+  for (const s of (smc.recentSweeps ?? []).slice(0, 2)) {
+    marks.push({
+      kind: "sweep",
+      label: s.type === "buy-side" ? "BSL sweep" : "SSL sweep",
+      level: s.level,
+      barsAgo: s.barsAgo,
+      tone: s.type === "buy-side" ? "sell" : "buy",
+    });
+  }
+
+  for (const level of (smc.buySideLiquidity ?? []).slice(-1)) {
+    marks.push({ kind: "line", label: "BSL", level, tone: "sell" });
+  }
+  for (const level of (smc.sellSideLiquidity ?? []).slice(-1)) {
+    marks.push({ kind: "line", label: "SSL", level, tone: "buy" });
+  }
+
+  if (smc.structure.inducement) {
+    marks.push({ kind: "line", label: "IDM", level: smc.structure.inducement.level, tone: "neutral" });
+  }
+  marks.push({ kind: "line", label: "EQ", level: smc.dealingRange.equilibrium, tone: "neutral" });
+
+  const zone = smc.orderBlocks[0] ?? null;
+  if (zone) {
+    marks.push({
+      kind: "zone",
+      label: "OB",
+      from: zone.from,
+      to: zone.to,
+      tone: zone.type === "bullish" ? "buy" : "sell",
+    });
+  }
+  const gap = smc.fairValueGaps[0] ?? null;
+  if (gap) {
+    marks.push({
+      kind: "zone",
+      label: "FVG",
+      from: gap.from,
+      to: gap.to,
+      tone: gap.type === "bullish" ? "buy" : "sell",
+    });
+  }
+
+  return marks;
+}
+
+
 function getEngineDirection(
   technicals: Technicals,
   higherTimeframes: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null,
