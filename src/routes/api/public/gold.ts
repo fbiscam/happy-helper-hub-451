@@ -653,7 +653,7 @@ export const Route = createFileRoute("/api/public/gold")({
                ...history,
                { role: "user", content: parts },
              ],
-              tradeIntent || shot ? 1300 : structureIntent ? 700 : 420,
+              tradeIntent || shot ? 1600 : structureIntent ? 900 : 600,
              Boolean(shot),
            );
            if ("error" in result) return json(request, { error: result.error }, result.status);
@@ -693,7 +693,7 @@ export const Route = createFileRoute("/api/public/gold")({
             { role: "system", content: EXPERT_SYSTEM },
             { role: "user", content: userContent },
           ],
-          1200,
+          1600,
           Boolean(body.chartImage),
         );
         if ("error" in result) return json(request, { error: result.error }, result.status);
