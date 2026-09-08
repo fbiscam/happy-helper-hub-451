@@ -394,6 +394,7 @@ export const Route = createFileRoute("/api/public/gold")({
           ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
           chart: { t: number; c: number }[];
+          nextCandle: Awaited<ReturnType<typeof import("@/lib/predict.server")["predictNextCandle"]>>;
         } | null = null;
         let htf: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null =
           null;
@@ -402,11 +403,13 @@ export const Route = createFileRoute("/api/public/gold")({
           const { fetchGoldMarket, computeTechnicals, fetchHtfSummaries } = await import(
             "@/lib/market.server"
           );
+          const { predictNextCandle } = await import("@/lib/predict.server");
           const { candles, ticker, offset } = await fetchGoldMarket(body.timeframe, 300);
           market = {
             ticker,
             technicals: computeTechnicals(candles),
             chart: candles.slice(-80).map((c) => ({ t: c.time, c: Number(c.close.toFixed(2)) })),
+            nextCandle: predictNextCandle(candles),
           };
           if (body.action !== "snapshot") {
             const higher = ["1h", "4h", "1d"].filter((tf) => tf !== body.timeframe);
@@ -424,9 +427,16 @@ export const Route = createFileRoute("/api/public/gold")({
         }
         const ticker = market?.ticker ?? null;
         const technicals = market?.technicals ?? null;
+        const nextCandle = market?.nextCandle ?? null;
 
         if (body.action === "snapshot") {
-          return json(request, { ticker, technicals, chart: market?.chart ?? [], timeframe: body.timeframe });
+          return json(request, {
+            ticker,
+            technicals,
+            nextCandle,
+            chart: market?.chart ?? [],
+            timeframe: body.timeframe,
+          });
         }
 
 
