@@ -137,17 +137,21 @@ async function callAi(
 ) {
   const lovableKey = process.env["LOVABLE_API_KEY"];
   const useFastGateway = !hasImage && Boolean(lovableKey);
+  // Primary BluesMind key first, backup key second (used only if the first fails).
+  const bluesmindKeys = [key, process.env["BLUESMIND_API_KEY_2"]].filter(
+    (k): k is string => Boolean(k && k.trim()),
+  );
   let model = hasImage
     ? BLUESMIND_VISION_MODEL
     : useFastGateway
       ? LOVABLE_AI_MODEL
       : BLUESMIND_CHAT_MODEL;
-  const send = async (timeoutMs: number) =>
+  const send = async (timeoutMs: number, bmKey: string) =>
     fetch(useFastGateway ? LOVABLE_AI_URL : BLUESMIND_URL, {
       method: "POST",
       headers: useFastGateway
         ? { "Content-Type": "application/json", "Lovable-API-Key": lovableKey ?? "" }
-        : { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        : { "Content-Type": "application/json", Authorization: `Bearer ${bmKey}` },
       body: JSON.stringify({
         model,
         max_completion_tokens: maxTokens,
@@ -177,12 +181,30 @@ async function callAi(
     });
   };
 
-  let res: Response;
-  try {
-    // Keep the user-facing request fast: a failed provider call goes straight
-    // to the fallback instead of making the user wait through a second call.
-    res = await send(hasImage ? 60_000 : 45_000);
-  } catch {
+  let res: Response | null = null;
+  const attemptKeys = useFastGateway ? [key] : bluesmindKeys.length ? bluesmindKeys : [key];
+  for (const attemptKey of attemptKeys) {
+    try {
+      // Keep the user-facing request fast: a failed provider call goes straight
+      // to the next key / fallback instead of making the user wait.
+      const attempt = await send(hasImage ? 60_000 : 45_000, attemptKey);
+      res = attempt;
+      // Key-level failures (auth, credits, rate limit, provider outage) retry
+      // with the backup BluesMind key when one is configured.
+      const keyFailure =
+        !useFastGateway &&
+        (attempt.status === 401 ||
+          attempt.status === 402 ||
+          attempt.status === 403 ||
+          attempt.status === 429 ||
+          attempt.status >= 500);
+      if (!keyFailure) break;
+    } catch {
+      res = null;
+    }
+  }
+
+  if (!res) {
     const fallback = await sendFallback().catch(() => null);
     if (!fallback) {
       return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
