@@ -141,8 +141,11 @@ async function callAi(
 
   let res: Response;
   try {
-    res = await send(110_000);
-    if (res.status >= 500) res = await send(60_000);
+    res = await send(hasImage ? 90_000 : 45_000);
+    if (res.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      res = await send(hasImage ? 60_000 : 35_000);
+    }
   } catch {
     return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
   }
@@ -436,14 +439,14 @@ export const Route = createFileRoute("/api/public/gold")({
             content: m.text,
           }));
 
-          const result = await callAi(
+           const result = await callAi(
             key,
             [
               { role: "system", content: EXPERT_SYSTEM },
               ...history,
               { role: "user", content: parts },
             ],
-            1300,
+             tradeIntent || shot ? 1300 : 320,
             Boolean(shot),
           );
           if ("error" in result) return json(request, { error: result.error }, result.status);

@@ -1,8 +1,8 @@
 const ENDPOINTS =
   location.protocol === "chrome-extension:"
     ? [
-        "https://project--9fc0698e-7373-4bdf-b90d-fe4ff903454b.lovable.app/api/public/gold",
         "https://project--9fc0698e-7373-4bdf-b90d-fe4ff903454b-dev.lovable.app/api/public/gold",
+        "https://project--9fc0698e-7373-4bdf-b90d-fe4ff903454b.lovable.app/api/public/gold",
       ]
     : ["/api/public/gold"];
 let API = ENDPOINTS[0];
@@ -265,19 +265,27 @@ function addMsg(cls, text, shot) {
 async function post(body) {
   let lastErr;
   for (const url of [API, ...ENDPOINTS.filter((u) => u !== API)]) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        cache: "no-store",
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
-      API = url;
-      return json;
-    } catch (e) {
-      lastErr = e;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const error = new Error(json.error || `Request failed (${res.status})`);
+          error.retryable = res.status === 429 || res.status >= 500;
+          throw error;
+        }
+        API = url;
+        return json;
+      } catch (e) {
+        lastErr = e;
+        if (!e.retryable || attempt === 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
     }
   }
   throw lastErr || new Error("Network error");
