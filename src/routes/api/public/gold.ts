@@ -521,8 +521,11 @@ export const Route = createFileRoute("/api/public/gold")({
             ticker,
             technicals,
             nextCandle,
+            marks: technicals ? buildChartMarks(technicals) : [],
+            marksBias: technicals?.smc.structure.bias ?? null,
             chart: market?.chart ?? [],
             timeframe: body.timeframe,
+
           });
         }
 
