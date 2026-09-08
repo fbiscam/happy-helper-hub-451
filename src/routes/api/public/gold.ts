@@ -393,27 +393,24 @@ function getEngineDirection(
   const localDirection = confluence.netBias;
   const alignment = higherTimeframes?.alignment;
 
-  // A directional call needs a clear local edge and a higher-timeframe
-  // majority in the same direction. Anything ambiguous fails closed.
+  // A directional call needs a clear local edge. Higher frames may be mixed,
+  // but they must not have a majority against the local direction.
   if (lead < 2 || localDirection === "neutral" || !alignment || alignment.totalFrames < 2) {
     return "stand-aside";
   }
-  let direction: SignalDirection = "stand-aside";
   if (
     localDirection === "bullish" &&
-    alignment.bullishFrames > alignment.bearishFrames
+    alignment.bullishFrames >= alignment.bearishFrames
   ) {
-    direction = "buy";
+    return "buy";
   }
   if (
     localDirection === "bearish" &&
-    alignment.bearishFrames > alignment.bullishFrames
+    alignment.bearishFrames >= alignment.bullishFrames
   ) {
-    direction = "sell";
+    return "sell";
   }
-  // A signal without a directionally correct OB/FVG in the correct half of
-  // the dealing range has no defensible entry and must not be published.
-  return getValidEntryZones(technicals, direction).length > 0 ? direction : "stand-aside";
+  return "stand-aside";
 }
 
 function detectDraftDirection(text: string): Exclude<SignalDirection, "stand-aside"> | null {
@@ -431,11 +428,17 @@ function enforceEngineDirection(
 ): string {
   if (!isTradeRequest) return text;
   const draftDirection = detectDraftDirection(text);
+  if (direction !== "stand-aside" && !draftDirection) return text;
   if (direction !== "stand-aside" && draftDirection === direction && technicals) {
+    const validZones = getValidEntryZones(technicals, direction);
+    // Direction and entry readiness are separate decisions. If no qualifying
+    // PD array exists yet, preserve a correctly directional wait-for-entry
+    // answer rather than incorrectly erasing the signal itself.
+    if (!validZones.length) return text;
     const entryLine = text.match(/(?:\*\*)?Entry(?:\*\*)?\s*:\s*([^\n]+)/i)?.[1] ?? "";
     const quotedEntries = [...entryLine.matchAll(/\b\d{3,5}(?:\.\d+)?\b/g)].map((match) => Number(match[0]));
     const tolerance = technicals.atr14 * 0.15;
-    const validEntry = getValidEntryZones(technicals, direction).some((zone) =>
+    const validEntry = validZones.some((zone) =>
       quotedEntries.some((entry) => entry >= zone.from - tolerance && entry <= zone.to + tolerance),
     );
     if (validEntry) return text;
