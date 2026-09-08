@@ -198,9 +198,26 @@ const TRADE_INTENT =
   /(trade|plan|entry|buy|sell|setup|analy|bias|target|stop|scalp|signal|signal|long|short|market|chart|screen|read|now|current|ict|smc|liquidity|fvg|order block)/i;
 
 type SignalDirection = "buy" | "sell" | "stand-aside";
+type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
+
+function getValidEntryZones(technicals: Technicals, direction: SignalDirection) {
+  if (direction === "stand-aside") return [];
+  const wantedType = direction === "buy" ? "bullish" : "bearish";
+  const equilibrium = technicals.smc.dealingRange.equilibrium;
+  const price = technicals.price;
+  return [...technicals.smc.orderBlocks, ...technicals.smc.fairValueGaps].filter((zone) => {
+    const midpoint = (zone.from + zone.to) / 2;
+    return (
+      zone.type === wantedType &&
+      (direction === "buy"
+        ? midpoint <= equilibrium && zone.from <= price
+        : midpoint >= equilibrium && zone.to >= price)
+    );
+  });
+}
 
 function getEngineDirection(
-  technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>,
+  technicals: Technicals,
   higherTimeframes: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null,
 ): SignalDirection {
   const confluence = technicals.smc.confluence;
@@ -213,19 +230,22 @@ function getEngineDirection(
   if (lead < 2 || localDirection === "neutral" || !alignment || alignment.totalFrames < 2) {
     return "stand-aside";
   }
+  let direction: SignalDirection = "stand-aside";
   if (
     localDirection === "bullish" &&
     alignment.bullishFrames > alignment.bearishFrames
   ) {
-    return "buy";
+    direction = "buy";
   }
   if (
     localDirection === "bearish" &&
     alignment.bearishFrames > alignment.bullishFrames
   ) {
-    return "sell";
+    direction = "sell";
   }
-  return "stand-aside";
+  // A signal without a directionally correct OB/FVG in the correct half of
+  // the dealing range has no defensible entry and must not be published.
+  return getValidEntryZones(technicals, direction).length > 0 ? direction : "stand-aside";
 }
 
 function detectDraftDirection(text: string): Exclude<SignalDirection, "stand-aside"> | null {
@@ -239,11 +259,18 @@ function enforceEngineDirection(
   text: string,
   direction: SignalDirection,
   isTradeRequest: boolean,
+  technicals: Technicals | null,
 ): string {
   if (!isTradeRequest) return text;
   const draftDirection = detectDraftDirection(text);
-  if (direction !== "stand-aside" && (!draftDirection || draftDirection === direction)) {
-    return text;
+  if (direction !== "stand-aside" && draftDirection === direction && technicals) {
+    const entryLine = text.match(/(?:\*\*)?Entry(?:\*\*)?\s*:\s*([^\n]+)/i)?.[1] ?? "";
+    const quotedEntries = [...entryLine.matchAll(/\b\d{3,5}(?:\.\d+)?\b/g)].map((match) => Number(match[0]));
+    const tolerance = technicals.atr14 * 0.15;
+    const validEntry = getValidEntryZones(technicals, direction).some((zone) =>
+      quotedEntries.some((entry) => entry >= zone.from - tolerance && entry <= zone.to + tolerance),
+    );
+    if (validEntry) return text;
   }
   if (direction === "stand-aside" && !draftDirection) return text;
 
@@ -418,6 +445,7 @@ export const Route = createFileRoute("/api/public/gold")({
             reviewed,
             engineDirection,
             TRADE_INTENT.test(body.question ?? ""),
+            technicals,
           );
           return json(request, { text: finalText, ticker, technicals, model: result.model });
         }
@@ -451,7 +479,7 @@ export const Route = createFileRoute("/api/public/gold")({
           shouldReview(result.text, body.question, Boolean(body.chartImage))
             ? await seniorReview(key, context, result.text, body.question)
             : result.text;
-        const guardedText = enforceEngineDirection(finalText, engineDirection, true);
+        const guardedText = enforceEngineDirection(finalText, engineDirection, true, technicals);
         return json(request, { text: guardedText, ticker, technicals, model: result.model });
       },
     },
