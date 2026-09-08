@@ -128,28 +128,37 @@ async function callAi(
   maxTokens: number,
   hasImage: boolean,
 ) {
-  let model = hasImage ? BLUESMIND_VISION_MODEL : BLUESMIND_CHAT_MODEL;
+  const lovableKey = process.env["LOVABLE_API_KEY"];
+  const useFastGateway = !hasImage && Boolean(lovableKey);
+  let model = hasImage
+    ? BLUESMIND_VISION_MODEL
+    : useFastGateway
+      ? LOVABLE_AI_FALLBACK_MODEL
+      : BLUESMIND_CHAT_MODEL;
   const send = async (timeoutMs: number) =>
-    fetch(BLUESMIND_URL, {
+    fetch(useFastGateway ? LOVABLE_AI_URL : BLUESMIND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers: useFastGateway
+        ? { "Content-Type": "application/json", "Lovable-API-Key": lovableKey ?? "" }
+        : { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
-        max_completion_tokens: maxTokens,
+        ...(useFastGateway
+          ? { max_tokens: maxTokens }
+          : { max_completion_tokens: maxTokens }),
         messages,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
 
   const sendFallback = async () => {
-    const fallbackKey = process.env["LOVABLE_API_KEY"];
-    if (!fallbackKey) return null;
+    if (!lovableKey || useFastGateway) return null;
     model = LOVABLE_AI_FALLBACK_MODEL;
     return fetch(LOVABLE_AI_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Lovable-API-Key": fallbackKey,
+        "Lovable-API-Key": lovableKey,
       },
       body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
     });
@@ -157,11 +166,9 @@ async function callAi(
 
   let res: Response;
   try {
-    res = await send(hasImage ? 90_000 : 45_000);
-    if (res.status >= 500) {
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
-      res = await send(hasImage ? 60_000 : 35_000);
-    }
+    // Keep the user-facing request fast: a failed provider call goes straight
+    // to the fallback instead of making the user wait through a second call.
+    res = await send(hasImage ? 60_000 : 25_000);
   } catch {
     const fallback = await sendFallback().catch(() => null);
     if (!fallback) {
@@ -379,6 +386,10 @@ export const Route = createFileRoute("/api/public/gold")({
           return json(request, { error: "Invalid request" }, 400);
         }
 
+        const tradeIntent = TRADE_INTENT.test(body.question ?? "");
+        const needsMarketData =
+          body.action !== "chat" || tradeIntent || Boolean(body.screenImage || body.chartImage);
+
         let market: {
           ticker: { price: number; changePercent: number; high: number; low: number; volume: number };
           technicals: ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
@@ -387,6 +398,7 @@ export const Route = createFileRoute("/api/public/gold")({
         let htf: Awaited<ReturnType<typeof import("@/lib/market.server")["fetchHtfSummaries"]>> | null =
           null;
         try {
+          if (!needsMarketData) throw new Error("SKIP_MARKET_FOR_CASUAL_CHAT");
           const { fetchGoldMarket, computeTechnicals, fetchHtfSummaries } = await import(
             "@/lib/market.server"
           );
@@ -401,7 +413,7 @@ export const Route = createFileRoute("/api/public/gold")({
             htf = await fetchHtfSummaries(offset ?? 0, higher);
           }
         } catch (error) {
-          console.error("Gold market data request failed", error);
+          if (needsMarketData) console.error("Gold market data request failed", error);
           if (body.action === "snapshot") {
             return json(
               request,
@@ -435,7 +447,6 @@ export const Route = createFileRoute("/api/public/gold")({
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
          if (body.action === "chat") {
-           const tradeIntent = TRADE_INTENT.test(body.question ?? "");
            const chatContext =
              !tradeIntent && market
                ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
