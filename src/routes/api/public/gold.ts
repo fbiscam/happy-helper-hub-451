@@ -40,7 +40,7 @@ Your method is ICT / Smart Money Concepts, applied strictly:
 
 DATA RULE: Every message gives you a live JSON block with real XAU/USD spot, EMAs, RSI, ATR, support/resistance clusters, an "smc" object containing market structure (BOS/CHoCH, last swing high/low), dealingRange (premium/discount/equilibrium), fairValueGaps, orderBlocks, buySideLiquidity, sellSideLiquidity, liquidity sweeps, RSI divergence, volume value area (POC/VAH/VAL), session ranges, prior-day high/low, volatility regime, the live session/killzone and a confluence score, plus a "higherTimeframes" object with a bias summary for each higher frame and an "alignment" verdict. Use those exact numbers — never invent a price, never round away from the data, never contradict the structure or zone the data reports. If a field is empty, say that array is empty rather than making one up.
 
-TOP-DOWN RULE: Read higherTimeframes first and state the higher-frame bias before anything else. No setup is A+ unless higherTimeframes.alignment agrees with your direction. If the verdict is "conflicted" or "leaning ... not aligned", the best grade you may give is B, and if the entry-frame bias fights the higher frames you must say stand aside.
+TOP-DOWN RULE (only when the user asks for a signal, trade idea, entry or market read — never for greetings or educational/conceptual questions): Read higherTimeframes first and state the higher-frame bias before anything else. No setup is A+ unless higherTimeframes.alignment agrees with your direction. If the verdict is "conflicted" or "leaning ... not aligned", the best grade you may give is B, and if the entry-frame bias fights the higher frames you must say stand aside.
 
 ACCURACY PROTOCOL (run this silently before every trading answer):
 1. Read the higher-frame bias from trend + EMA 200 + smc.structure.bias.
@@ -54,16 +54,18 @@ ACCURACY PROTOCOL (run this silently before every trading answer):
 HONESTY RULE: You are judged on accuracy, not optimism. A skipped trade is a correct answer. Never soften a mixed market into a clean signal, and never give an entry without a stop.
 
  
+BREVITY (very important): Be concise. Answer the question directly in as few words as possible. Simple questions get 2-4 short sentences total — never a long essay. Only a full trade setup gets the Trade Plan format; everything else stays short. Never repeat engine data back, never explain background theory unless asked.
+
 WRITING STYLE (very important): Write exactly like a modern AI assistant (ChatGPT-quality). Use complete, grammatical English sentences — never note-style fragments, never dumped keywords, never broken half-lines.
 
 Formatting rules:
-1. Start with one short plain-language paragraph (2-3 sentences) that answers the user directly.
-2. For anything structured, use short markdown headings written in Title Case (e.g. "## Market Structure", "## Trade Plan", "## Risk").
-3. Under each heading write either a real paragraph (2-4 full sentences, 40-80 words) or a clean list — never both jammed together.
+1. Start with one short plain-language paragraph (1-2 sentences) that answers the user directly.
+2. Only add headings when the answer truly needs structure (trade plan, multi-part analysis). A normal question = short prose, no headings.
+3. Keep any paragraph under ~50 words; keep lists to 3-6 items.
 4. Use numbered lists (1., 2., 3.) for steps, trade plans and execution sequences; use "-" bullets only for unordered facts such as levels or observations.
 5. Bold key numbers and terms with **double asterisks** (entry, stop, targets).
 6. Keep one blank line between every heading, paragraph and list.
-7. Never write more than ~120 words in a single paragraph; break it up instead.
+7. Total length limit: casual questions ~60 words; chart/screen analysis ~150 words; full trade plan ~250 words. Never exceed these.
 
 TRADE PLAN FORMAT (use whenever you give a setup):
 ## Trade Plan
@@ -195,7 +197,7 @@ Your job:
 Output ONLY the final corrected answer for the user. Do not mention the draft, the review, yourself, or that any correction happened. If the draft is just a greeting or a short casual reply, return it as-is.`;
 
 const TRADE_INTENT =
-  /(trade|plan|entry|buy|sell|setup|analy|bias|target|stop|scalp|signal|signal|long|short|market|chart|screen|read|now|current|ict|smc|liquidity|fvg|order block)/i;
+  /(trade|plan|entry|buy|sell|setup|signal|scalp|target|stop loss|stop-loss|analy|read (the |my )?(chart|screen|market)|what('| i)s the market|market (now|today|update)|current price|long|short)\b/i;
 
 type SignalDirection = "buy" | "sell" | "stand-aside";
 type Technicals = ReturnType<typeof import("@/lib/market.server")["computeTechnicals"]>;
@@ -405,12 +407,20 @@ export const Route = createFileRoute("/api/public/gold")({
             })
           : "Live market data is temporarily unavailable. Answer the user's message normally, and do not invent a current price or live levels.";
 
-        if (body.action === "chat") {
-          const parts: unknown[] = [
-            {
-              type: "text",
-              text:
-                `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${context}\n\n` +
+         if (body.action === "chat") {
+           const tradeIntent = TRADE_INTENT.test(body.question ?? "");
+           const chatContext =
+             !tradeIntent && market
+               ? JSON.stringify({ ticker, technicals, timeframe: body.timeframe })
+               : context;
+           const parts: unknown[] = [
+             {
+               type: "text",
+               text:
+                 `Live gold data (XAU/USD spot, timeframe ${body.timeframe}):\n${chatContext}\n\n` +
+                 (tradeIntent
+                   ? ""
+                   : "This is a general/educational question — answer it briefly and directly. Do NOT give a trade plan, signal, stand-aside verdict or any market-direction call unless the user asked for one.\n\n") +
                 (body.screenImage || body.chartImage
                   ? "The image below is the user's screen/chart right now — read the chart and levels visible on it and answer from what you actually see. Never say you cannot see the screen.\n\n"
                   : "No screen image is attached. If the user asks you to read their screen, tell them to press 'Share screen' first instead of guessing.\n\n") +
