@@ -550,6 +550,8 @@ export function computeTechnicals(candles: Candle[]) {
       orderBlocks: orderBlocks(candles, price, a),
       ...liquidity(sw, a),
       recentSweeps: sweeps(candles, sw, a),
+      priceAction: priceAction(candles, a),
+
       divergence: divergence(candles),
       valueArea: valueArea(candles),
       sessionRanges: sessionRanges(candles),
