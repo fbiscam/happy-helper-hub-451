@@ -90,7 +90,8 @@ const BLUESMIND_URL = "https://api.bluesminds.com/v1/chat/completions";
 const BLUESMIND_CHAT_MODEL = "openai/gpt-oss-20b";
 const BLUESMIND_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct";
 const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const LOVABLE_AI_FALLBACK_MODEL = "google/gemini-3.8-flash";
+// Upgraded brain: OpenAI's most capable model for text analysis.
+const LOVABLE_AI_MODEL = "openai/gpt-6-astra";
 
 function isAllowedOrigin(origin: string) {
   if (origin.startsWith("chrome-extension://")) return true;
