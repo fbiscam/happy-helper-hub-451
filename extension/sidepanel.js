@@ -535,7 +535,7 @@ function renderSnapshot(d) {
   const bias = String(d.technicals?.trend || d.indicators?.trend || (up ? "Bullish" : "Bearish"));
   trend.textContent = bias.toUpperCase();
   trend.className = "trend " + (/bull|up/i.test(bias) ? "bull" : /bear|down/i.test(bias) ? "bear" : "");
-  drawChart(d.chart);
+  drawChart(d.chart, Array.isArray(d.marks) ? d.marks : [], d.marksBias ?? null);
   renderPrediction(d.nextCandle);
 }
 
