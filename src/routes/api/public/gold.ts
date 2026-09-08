@@ -365,10 +365,9 @@ export const Route = createFileRoute("/api/public/gold")({
         const key = process.env["BLUESMIND_API_KEY"];
         if (!key) return json(request, { error: "BluesMind AI is not configured" }, 500);
 
-        const engineDirection =
-          technicals && body.action !== "snapshot"
-            ? getEngineDirection(technicals, htf)
-            : "stand-aside";
+        const engineDirection = technicals
+          ? getEngineDirection(technicals, htf)
+          : "stand-aside";
         const context = market
           ? JSON.stringify({
               ticker,
