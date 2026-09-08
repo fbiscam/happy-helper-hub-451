@@ -310,19 +310,34 @@ async function post(body) {
 /* ---------- price chart ---------- */
 
 function drawChart(points) {
-  const svg = $("chart");
-  if (!svg) return;
+  const canvas = $("chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
   const cleanPoints = Array.isArray(points)
     ? points.filter((point) => Number.isFinite(Number(point?.c)))
     : [];
+  const rect = canvas.getBoundingClientRect();
+  const cssWidth = Math.max(260, Math.round(rect.width || 300));
+  const cssHeight = 96;
+  const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const pixelWidth = Math.round(cssWidth * scale);
+  const pixelHeight = Math.round(cssHeight * scale);
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
   if (cleanPoints.length < 2) {
-    if (!svg.querySelector("path")) {
-      svg.innerHTML = '<text x="150" y="52" text-anchor="middle" class="chart-empty">Loading chart…</text>';
-    }
+    ctx.fillStyle = "#5f6368";
+    ctx.font = '11px "Google Sans", system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText("Loading chart…", cssWidth / 2, 52);
     return;
   }
-  const W = 300;
-  const H = 96;
+  const W = cssWidth;
+  const H = cssHeight;
   const pad = 6;
   const vals = cleanPoints.map((p) => Number(p.c));
   let min = Math.min(...vals);
@@ -335,29 +350,44 @@ function drawChart(points) {
   const x = (i) => (i / (cleanPoints.length - 1)) * W;
   const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
 
-  let line = "";
-  cleanPoints.forEach((p, i) => {
-    line += `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(Number(p.c)).toFixed(2)} `;
-  });
-  const area = `${line}L${W} ${H} L0 ${H} Z`;
   const up = vals[vals.length - 1] >= vals[0];
   const stroke = up ? "#c9a227" : "#c0553f";
-  const lastX = W;
   const lastY = y(vals[vals.length - 1]);
 
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="chfill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${stroke}" stop-opacity="0.28" />
-        <stop offset="100%" stop-color="${stroke}" stop-opacity="0" />
-      </linearGradient>
-    </defs>
-    <line class="chart-grid" x1="0" y1="${(H / 2).toFixed(1)}" x2="${W}" y2="${(H / 2).toFixed(1)}" />
-    <path d="${area}" fill="url(#chfill)" />
-    <path d="${line.trim()}" fill="none" stroke="${stroke}" stroke-width="1.6"
-      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-    <circle cx="${(lastX - 1.5).toFixed(2)}" cy="${lastY.toFixed(2)}" r="2.6" fill="${stroke}" />
-  `;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.07)";
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2);
+  ctx.lineTo(W, H / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const trace = new Path2D();
+  cleanPoints.forEach((p, i) => {
+    const px = x(i);
+    const py = y(Number(p.c));
+    if (i === 0) trace.moveTo(px, py);
+    else trace.lineTo(px, py);
+  });
+  const area = new Path2D();
+  area.addPath(trace);
+  area.lineTo(W, H);
+  area.lineTo(0, H);
+  area.closePath();
+  const fill = ctx.createLinearGradient(0, 0, 0, H);
+  fill.addColorStop(0, up ? "rgba(201, 162, 39, 0.28)" : "rgba(192, 85, 63, 0.28)");
+  fill.addColorStop(1, up ? "rgba(201, 162, 39, 0)" : "rgba(192, 85, 63, 0)");
+  ctx.fillStyle = fill;
+  ctx.fill(area);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke(trace);
+  ctx.fillStyle = stroke;
+  ctx.beginPath();
+  ctx.arc(W - 2.6, lastY, 2.6, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 let lastPrice = null;
@@ -396,7 +426,8 @@ async function loadSnapshot() {
   } catch (e) {
     console.warn("market pulse failed", e);
     const trend = $("trend");
-    if (!$("chart")?.querySelector("path")) {
+    if (lastPrice === null) {
+      drawChart([]);
       trend.textContent = "RECONNECTING";
       trend.className = "trend";
     }
