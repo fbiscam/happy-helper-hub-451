@@ -139,15 +139,12 @@ async function callAi(
 
   let res: Response;
   try {
-    res = await send(45_000);
-    if (res.status >= 500) res = await send(35_000);
+    res = await send(110_000);
+    if (res.status >= 500) res = await send(60_000);
   } catch {
-    try {
-      res = await send(35_000);
-    } catch {
-      return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
-    }
+    return { error: "The analyst is busy right now — please try again in a moment.", status: 504 };
   }
+
 
   if (!res.ok) {
     const failure = (await res.json().catch(() => null)) as
